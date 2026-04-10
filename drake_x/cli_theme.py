@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING
 
 from rich import box
 from rich.console import Console
+from rich.errors import MissingStyle
 from rich.panel import Panel
 from rich.table import Table
 from rich.theme import Theme
@@ -90,17 +91,35 @@ def render_header(console: Console, *, version: str | None = None) -> None:
     panel, ~56 columns wide. Uses a single ``☠`` glyph as the only pirate
     motif. Falls back gracefully on terminals without color.
     """
-    version_tag = f"  [muted]v{version}[/muted]" if version else ""
-    body = (
-        f"[brand.skull]☠[/brand.skull]  "
-        f"[brand]DRAKE·X[/brand]{version_tag}\n"
-        f"[brand.sub]local-first · scope-enforced · evidence-driven[/brand.sub]"
-    )
+    themed = True
+    for style_name in ("brand.skull", "brand", "brand.sub", "muted", "accent.rule"):
+        try:
+            console.get_style(style_name)
+        except MissingStyle:
+            themed = False
+            break
+
+    if themed:
+        version_tag = f"  [muted]v{version}[/muted]" if version else ""
+        body = (
+            f"[brand.skull]☠[/brand.skull]  "
+            f"[brand]DRAKE·X[/brand]{version_tag}\n"
+            f"[brand.sub]local-first · scope-enforced · evidence-driven[/brand.sub]"
+        )
+        border_style = "accent.rule"
+    else:
+        version_tag = f"  v{version}" if version else ""
+        body = (
+            f"☠  DRAKE·X{version_tag}\n"
+            "local-first · scope-enforced · evidence-driven"
+        )
+        border_style = "cyan"
+
     console.print(
         Panel(
             body,
             box=box.HEAVY,
-            border_style="accent.rule",
+            border_style=border_style,
             padding=(0, 2),
             expand=False,
         )
