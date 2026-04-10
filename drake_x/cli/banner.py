@@ -6,8 +6,9 @@ installs and packaged distributions.
 
 Display rules:
 
-- A compact animated wordmark is shown only when stdout is a TTY **and**
-  the terminal is at least :data:`BANNER_MIN_WIDTH` columns wide.
+- The pirate-skull ASCII identity banner is shown only when stdout is a
+  TTY **and** the terminal is at least :data:`BANNER_MIN_WIDTH` columns
+  wide.
 - On narrower terminals, the compact branded panel
   (:func:`drake_x.cli_theme.render_header`) is shown instead.
 - On non-TTY output (piped, redirected, CI) the banner is suppressed
@@ -34,13 +35,13 @@ from ..logging import get_logger
 log = get_logger("banner")
 
 #: Minimum terminal width (columns) required to render the animated
-#: wordmark without wrapping. Below this threshold we fall back to the
-#: compact panel.
-BANNER_MIN_WIDTH: int = 86
+#: pirate-skull banner without wrapping. Below this threshold we fall
+#: back to the compact panel.
+BANNER_MIN_WIDTH: int = 200
 
 #: Delay per rendered banner line. Kept intentionally small so the
-#: startup still feels fast in interactive use.
-_REVEAL_DELAY_S: float = 0.012
+#: startup still feels fast even with the larger identity art.
+_REVEAL_DELAY_S: float = 0.004
 
 #: Resolved path to the banner file shipped inside the package.
 _BANNER_PATH: Path = Path(__file__).resolve().parents[1] / "assets" / "banner.txt"
@@ -78,7 +79,7 @@ def render_banner(console: Console) -> None:
 
 
 def _render_reveal(console: Console, banner_text: str) -> None:
-    """Render the startup wordmark with a restrained line reveal.
+    """Render the startup banner with a restrained line reveal.
 
     This keeps the first impression more deliberate than a static wall of
     ASCII while staying fast enough for normal CLI use.
