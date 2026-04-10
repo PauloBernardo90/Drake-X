@@ -57,7 +57,7 @@ def build_analyst_prompt(*, target_display: str, profile: str, evidence: list[di
     schema_text = json.dumps(OUTPUT_SCHEMA, indent=2)
     # Hard cap the evidence size so we never blow the context budget on a
     # noisy scan. Sorted by tool name so output is deterministic in tests.
-    trimmed = [_trim_artifact(a) for a in evidence][:20]
+    trimmed = [_trim_artifact(a) for a in evidence][:8]
     evidence_text = json.dumps(trimmed, indent=2, default=str)
 
     return f"""TARGET: {target_display}
@@ -93,7 +93,7 @@ def _trim_artifact(artifact: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _truncate_payload(payload: Any, *, max_chars: int = 2000) -> Any:
+def _truncate_payload(payload: Any, *, max_chars: int = 800) -> Any:
     text = json.dumps(payload, default=str)
     if len(text) <= max_chars:
         return payload

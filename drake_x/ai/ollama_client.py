@@ -25,7 +25,7 @@ log = get_logger("ollama")
 class OllamaClient:
     """Minimal Ollama HTTP wrapper. Local-only by design."""
 
-    def __init__(self, *, base_url: str, model: str, timeout: float = 60.0) -> None:
+    def __init__(self, *, base_url: str, model: str, timeout: float = 180.0) -> None:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
@@ -46,7 +46,8 @@ class OllamaClient:
             "stream": False,
             "options": {
                 "temperature": 0.2,
-                "num_ctx": 4096,
+                "num_ctx": 2048,
+                "num_predict": 256,
             },
         }
         if system:

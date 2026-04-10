@@ -44,8 +44,8 @@ ALL_TARGET_TYPES: Final[tuple[str, ...]] = (
 # Defaults.
 DEFAULT_DB_PATH: Final[str] = "./drake_x.db"
 DEFAULT_OUTPUT_DIR: Final[str] = "./drake_x_runs"
-DEFAULT_OLLAMA_URL: Final[str] = "http://localhost:11434"
-DEFAULT_OLLAMA_MODEL: Final[str] = "llama3.2:3b"
+DEFAULT_OLLAMA_URL: Final[str] = "http://127.0.0.1:11434"
+DEFAULT_OLLAMA_MODEL: Final[str] = "llama3.2:1b"
 DEFAULT_TIMEOUT_SECONDS: Final[int] = 180
 
 # Authorized-use disclaimer rendered in CLI help and reports.
