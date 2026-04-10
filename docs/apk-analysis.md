@@ -77,11 +77,34 @@ export GHIDRA_INSTALL_DIR=/opt/ghidra
 
 **What it does:**
 
-- Runs `analyzeHeadless` on each `.so` in the APK's `lib/` directory
-- Extracts function names, symbols, and string references
-- Identifies suspicious symbols (decrypt, anti-debug, root check, etc.)
-- Feeds results into the behavior and obfuscation analyzers
-- Results are labeled as `ghidra_headless` source in the report
+Drake-X uses a **structured Ghidra export** as the preferred native
+analysis backend. When `--ghidra` is enabled:
+
+1. Runs `analyzeHeadless` with a custom Java export script
+   (`DrakeXExportNativeJson.java`) on each `.so` in the APK's `lib/`
+   directory.
+2. Produces a structured JSON file per binary containing:
+   - Function list (name, address, signature, callers, callees)
+   - String table
+   - Import/export symbols
+   - JNI export identification
+   - Metadata (architecture, executable format)
+3. Normalizes the JSON into `NativeBinaryAnalysis` models.
+4. Identifies suspicious indicators:
+   - Functions matching anti-analysis/crypto/dynamic-loading patterns
+   - JNI exports (Java-to-native bridges)
+   - Notable imports (ptrace, crypto, dlopen, etc.)
+5. Surfaces native findings in the technical report, findings list, and
+   evidence graph.
+6. Feeds high-signal strings into the behavior and obfuscation analyzers.
+
+**Structured JSON output** is stored alongside other analysis artifacts
+in the workspace evidence tree (`<output>/ghidra/<lib>.json`) for
+reproducibility and manual follow-up in the Ghidra GUI.
+
+If the structured export script is not available (e.g. running from a
+packaged install without the repo root), Drake-X falls back to the
+stdout-based Ghidra wrapper automatically.
 
 **When to use it:**
 
@@ -89,9 +112,21 @@ export GHIDRA_INSTALL_DIR=/opt/ghidra
 - When jadx fails to decompile obfuscated code
 - When embedded payloads need deeper inspection
 - When you need better targets for Frida dynamic validation
+- When you want structured, machine-readable native analysis evidence
 
 **Graceful degradation:** If Ghidra is not installed, the `--ghidra`
-flag produces a warning and the pipeline continues without it.
+flag produces a warning and the pipeline continues without it. If Ghidra
+fails on one binary, the remaining binaries are still analyzed.
+
+**Native analysis limitations:**
+
+- Ghidra headless provides function-level visibility but not full
+  decompilation output.
+- Suspicious indicators are pattern-matched and require analyst
+  verification.
+- Packed or encrypted native code may not yield meaningful analysis.
+- For functions of interest, follow up with interactive Ghidra GUI
+  analysis.
 
 ### VirusTotal enrichment (opt-in)
 
@@ -197,9 +232,11 @@ Produces:
   raw/              # raw APK contents (unzip)
   apktool/          # apktool decompilation (smali + resources)
   jadx/             # jadx decompilation (Java source)
+  ghidra/           # Ghidra structured JSON exports (opt-in)
   apk_report.md     # technical report
   apk_executive.md  # executive summary
   apk_analysis.json # structured findings
+  evidence_graph.json # evidence relationship graph
 ```
 
 ## Report structure

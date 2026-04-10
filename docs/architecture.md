@@ -166,6 +166,14 @@ Each integration is a `BaseTool` subclass that declares metadata
 `asyncio.create_subprocess_exec`. No shell strings are ever constructed.
 Output is captured, truncated, and stored as a `ToolResult`.
 
+**Native analysis integrations** (`drake_x/integrations/native/`)
+provide structured Ghidra headless export for `.so` binaries. A custom
+Java script (`DrakeXExportNativeJson.java`) produces machine-readable
+JSON that is normalized into `NativeBinaryAnalysis` models by
+`drake_x/normalize/native/ghidra_json.py`. This is the preferred
+native-analysis backend when Ghidra is available; the stdout-based
+wrapper in `drake_x/integrations/apk/ghidra.py` serves as the fallback.
+
 Integrations opt into the rate limiter via `ToolMeta.http_style=True`.
 The plugin loader discovers built-in adapters, real optional integrations
 (httpx, ffuf), and third-party packages registered through the

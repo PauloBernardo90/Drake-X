@@ -206,42 +206,16 @@ def run_analysis(
         elif not r2.available:
             result.tools_skipped.append("rabin2")
 
-    # Ghidra deeper analysis (opt-in)
+    # Ghidra deeper analysis (opt-in) — structured export preferred
     if use_ghidra:
-        from ..integrations.apk.ghidra import analyze_native_libs, is_available as ghidra_available
+        from ..integrations.apk.ghidra import is_available as ghidra_available
         from ..models.apk import GhidraAnalysis
         if ghidra_available():
-            log.info("Phase 3b: Ghidra headless analysis")
+            log.info("Phase 3b: Ghidra structured native analysis")
             ghidra_dir = work / "ghidra"
-            ghidra_results = analyze_native_libs(raw_dir, ghidra_dir, timeout=600)
-            analyzed = []
-            ghidra_strings: list[str] = []
-            suspicious: list[str] = []
-            notes: list[str] = []
-            for rel_path, gout in ghidra_results.items():
-                analyzed.append(rel_path)
-                if gout.ok:
-                    # Extract suspicious symbols from Ghidra output
-                    for line in gout.stdout.splitlines():
-                        lower = line.lower()
-                        if any(kw in lower for kw in ["decrypt", "cipher", "obfuscat", "anti", "frida",
-                                                       "root", "emulat", "debug", "inject", "hook",
-                                                       "dex", "loader", "reflect"]):
-                            suspicious.append(line.strip()[:150])
-                    ghidra_strings.append(gout.stdout)
-                else:
-                    notes.append(f"{rel_path}: {gout.error or 'analysis failed'}")
-
-            result.ghidra_analysis = GhidraAnalysis(
-                available=True,
-                analyzed_binaries=analyzed,
-                suspicious_symbols=suspicious[:50],
-                native_strings=[s[:200] for s in ghidra_strings[:5]],
-                notes=notes,
+            result, strings_text = _run_structured_ghidra(
+                result, raw_dir, ghidra_dir, strings_text, timeout=600 if not deep else 900,
             )
-            result.tools_ran.append("ghidra")
-            # Feed Ghidra output into the corpus for behavior/obfuscation analysis
-            strings_text += "\n".join(ghidra_strings) + "\n"
         else:
             result.ghidra_analysis = GhidraAnalysis(
                 available=False, error="Ghidra not installed. Set GHIDRA_INSTALL_DIR or install Ghidra."
@@ -361,3 +335,87 @@ def _collect_text(root: Path, glob_pattern: str, *, limit_mb: int = 10) -> str:
         except OSError:
             continue
     return "\n".join(parts)
+
+
+def _run_structured_ghidra(
+    result: ApkAnalysisResult,
+    raw_dir: Path,
+    ghidra_dir: Path,
+    strings_text: str,
+    *,
+    timeout: int = 600,
+) -> tuple[ApkAnalysisResult, str]:
+    """Run the Ghidra structured export on native libs and populate results.
+
+    Uses the Drake-X Java export script (``DrakeXExportNativeJson.java``)
+    to produce structured JSON for each ``.so`` file, then normalizes the
+    output into :class:`NativeBinaryAnalysis` models.
+
+    Falls back to the stdout-based wrapper if the structured script is not
+    found (e.g. running from a packaged install without the repo root).
+
+    Returns ``(result, updated_strings_text)``.
+    """
+    from ..integrations.native.ghidra_headless import analyze_native_libs_structured
+    from ..models.apk import GhidraAnalysis
+    from ..normalize.native.ghidra_json import parse_ghidra_json
+
+    ghidra_dir.mkdir(parents=True, exist_ok=True)
+    json_map = analyze_native_libs_structured(raw_dir, ghidra_dir, timeout=timeout)
+
+    analyzed: list[str] = []
+    suspicious_symbols: list[str] = []
+    notes: list[str] = []
+
+    for rel_path, json_path in json_map.items():
+        analyzed.append(rel_path)
+        native = parse_ghidra_json(json_path, binary_path=rel_path)
+        if native.error:
+            notes.append(f"{rel_path}: {native.error}")
+            continue
+
+        result.native_analysis.append(native)
+
+        # Collect suspicious symbols for backward-compat GhidraAnalysis
+        suspicious_symbols.extend(native.suspicious_functions[:20])
+
+        # Feed high-signal strings into the analysis corpus
+        for s in native.strings[:200]:
+            strings_text += s.value + "\n"
+
+    # Check for .so files that Ghidra didn't analyze (script missing, etc.)
+    lib_dir = raw_dir / "lib"
+    if lib_dir.exists():
+        all_sos = sorted(str(so.relative_to(raw_dir)) for so in lib_dir.glob("**/*.so"))
+        missed = [s for s in all_sos if s not in analyzed]
+        if missed:
+            # Fall back to stdout-based analysis for missed binaries
+            from ..integrations.apk.ghidra import analyze_native_libs
+            fallback_results = analyze_native_libs(raw_dir, ghidra_dir, timeout=timeout)
+            for rel_path, gout in fallback_results.items():
+                if rel_path not in analyzed:
+                    analyzed.append(rel_path)
+                    if gout.ok:
+                        for line in gout.stdout.splitlines():
+                            lower = line.lower()
+                            if any(kw in lower for kw in [
+                                "decrypt", "cipher", "obfuscat", "anti", "frida",
+                                "root", "emulat", "debug", "inject", "hook",
+                                "dex", "loader", "reflect",
+                            ]):
+                                suspicious_symbols.append(line.strip()[:150])
+                        strings_text += gout.stdout + "\n"
+                    else:
+                        notes.append(f"{rel_path}: {gout.error or 'analysis failed'}")
+
+    result.ghidra_analysis = GhidraAnalysis(
+        available=True,
+        analyzed_binaries=analyzed,
+        suspicious_symbols=suspicious_symbols[:50],
+        notes=notes,
+    )
+    result.tools_ran.append("ghidra")
+
+    log.info("Ghidra structured export: %d binaries analyzed, %d with structured data",
+             len(analyzed), len(result.native_analysis))
+    return result, strings_text

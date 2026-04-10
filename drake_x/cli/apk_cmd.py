@@ -158,7 +158,12 @@ def analyze(
     info(console, f"protections:   {len([p for p in result.protection_indicators if p.status.value != 'not_observed'])}")
     info(console, f"frida targets: {len(result.frida_targets)}")
     if result.ghidra_analysis.available:
-        info(console, f"ghidra:        {len(result.ghidra_analysis.analyzed_binaries)} binary(ies) analyzed")
+        structured = len(result.native_analysis)
+        total = len(result.ghidra_analysis.analyzed_binaries)
+        if structured:
+            info(console, f"ghidra:        {total} binary(ies) analyzed ({structured} structured)")
+        else:
+            info(console, f"ghidra:        {total} binary(ies) analyzed")
     elif ghidra:
         warn(console, f"ghidra:        {result.ghidra_analysis.error or 'unavailable'}")
     if result.vt_enrichment.available:

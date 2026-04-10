@@ -137,4 +137,58 @@ def build_apk_evidence_graph(result: ApkAnalysisResult) -> EvidenceGraph:
                 g.link(bid, cid, EdgeType.SUPPORTS, confidence=0.5)
         g.link(cid, root_id, EdgeType.RELATED_TO)
 
+    # Native binary analysis (structured Ghidra export)
+    for i, na in enumerate(result.native_analysis):
+        bname = na.binary_path.rsplit("/", 1)[-1] if "/" in na.binary_path else na.binary_path
+        nid = f"apk:native:{i}:{bname}"
+        g.add_node(EvidenceNode(
+            node_id=nid,
+            kind=NodeKind.ARTIFACT,
+            domain="apk",
+            label=bname,
+            data={
+                "binary_path": na.binary_path,
+                "architecture": na.architecture,
+                "function_count": na.function_count,
+                "jni_export_count": len(na.jni_exports),
+                "suspicious_count": len(na.suspicious_functions),
+                "source_label": na.source_label,
+            },
+        ))
+        g.link(nid, root_id, EdgeType.DERIVED_FROM)
+
+        # JNI exports as indicator nodes
+        for j, export in enumerate(na.jni_exports[:10]):
+            eid = f"apk:native_jni:{i}:{j}:{export.name}"
+            g.add_node(EvidenceNode(
+                node_id=eid,
+                kind=NodeKind.INDICATOR,
+                domain="apk",
+                label=export.name,
+                data={"address": export.address, "binary": na.binary_path},
+            ))
+            g.link(eid, nid, EdgeType.DERIVED_FROM, confidence=0.95)
+
+        # Suspicious function indicators
+        for j, fn_name in enumerate(na.suspicious_functions[:10]):
+            sid = f"apk:native_suspicious:{i}:{j}"
+            g.add_node(EvidenceNode(
+                node_id=sid,
+                kind=NodeKind.INDICATOR,
+                domain="apk",
+                label=fn_name[:60],
+                data={"indicator": fn_name, "binary": na.binary_path},
+            ))
+            g.link(sid, nid, EdgeType.DERIVED_FROM, confidence=0.7)
+            # Link to relevant protections if names match
+            for pi in result.protection_indicators:
+                if pi.status == ProtectionStatus.NOT_OBSERVED:
+                    continue
+                pid = f"apk:protection:{pi.protection_type}"
+                if g.get_node(pid) and any(
+                    kw in fn_name.lower()
+                    for kw in pi.protection_type.replace("_", " ").split()
+                ):
+                    g.link(sid, pid, EdgeType.SUPPORTS, confidence=0.6)
+
     return g

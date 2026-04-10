@@ -116,4 +116,67 @@ def apk_result_to_findings(result: ApkAnalysisResult) -> list[Finding]:
             tags=["apk", "campaign", ca.category],
         ))
 
+    # Native analysis findings (structured Ghidra export)
+    findings.extend(_native_findings(result))
+
+    return findings
+
+
+def _native_findings(result: ApkAnalysisResult) -> list[Finding]:
+    """Convert structured native analysis into standard findings."""
+    findings: list[Finding] = []
+    if not result.native_analysis:
+        return findings
+
+    # JNI exports — high interest for malware hiding logic in native code
+    all_jni = [
+        (na.binary_path, e)
+        for na in result.native_analysis
+        for e in na.jni_exports
+    ]
+    if all_jni:
+        jni_names = ", ".join(e.name for _, e in all_jni[:5])
+        findings.append(Finding(
+            title="Native JNI exports detected",
+            summary=f"{len(all_jni)} JNI export(s) across native libraries: {jni_names}",
+            severity=FindingSeverity.MEDIUM if len(all_jni) >= 3 else FindingSeverity.LOW,
+            confidence=0.95,
+            source=FindingSource.RULE,
+            fact_or_inference="fact",
+            related_tools=["ghidra"],
+            evidence=[FindingEvidence(
+                artifact_kind="apk.native.jni_exports",
+                tool_name="ghidra_structured_export",
+                excerpt=jni_names,
+                confidence=0.95,
+            )],
+            tags=["apk", "native", "jni"],
+        ))
+
+    # Suspicious native functions/strings
+    all_suspicious = [
+        fn
+        for na in result.native_analysis
+        for fn in na.suspicious_functions
+    ]
+    if all_suspicious:
+        sample = ", ".join(all_suspicious[:5])
+        findings.append(Finding(
+            title="Suspicious native symbols",
+            summary=f"{len(all_suspicious)} suspicious symbol(s) in native code: {sample}",
+            severity=FindingSeverity.MEDIUM,
+            confidence=0.7,
+            source=FindingSource.RULE,
+            fact_or_inference="fact",
+            related_tools=["ghidra"],
+            evidence=[FindingEvidence(
+                artifact_kind="apk.native.suspicious_symbols",
+                tool_name="ghidra_structured_export",
+                excerpt=sample,
+                confidence=0.7,
+            )],
+            caveats=["Pattern-matched symbol names require analyst verification"],
+            tags=["apk", "native", "suspicious"],
+        ))
+
     return findings

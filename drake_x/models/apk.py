@@ -20,6 +20,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .native_analysis import NativeBinaryAnalysis
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -265,6 +267,9 @@ class ApkAnalysisResult(BaseModel):
 
     # Ghidra deeper analysis (opt-in)
     ghidra_analysis: GhidraAnalysis = Field(default_factory=GhidraAnalysis)
+
+    # Structured native binary analysis (Ghidra structured export)
+    native_analysis: list[NativeBinaryAnalysis] = Field(default_factory=list)
 
     # Warnings accumulated during analysis
     warnings: list[str] = Field(default_factory=list)

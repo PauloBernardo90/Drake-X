@@ -166,31 +166,122 @@ def _sec_ghidra(lines: list[str], r: ApkAnalysisResult) -> None:
     ga = r.ghidra_analysis
     if not ga.available and not ga.error:
         return  # Ghidra was not requested
-    lines.append("## Ghidra Deeper Analysis")
+    lines.append("## Ghidra Native Analysis")
     lines.append("")
     lines.append("> **Source classification:** static fact (deeper binary analysis via Ghidra headless)")
     lines.append("")
-    if ga.available:
-        lines.append(f"- **Binaries analyzed:** {len(ga.analyzed_binaries)}")
-        for b in ga.analyzed_binaries:
-            lines.append(f"    - `{b}`")
-        if ga.suspicious_symbols:
-            lines.append("")
-            lines.append("**Suspicious symbols / references:**")
-            lines.append("")
-            for sym in ga.suspicious_symbols[:20]:
-                lines.append(f"- `{sym}`")
-        if ga.notes:
-            lines.append("")
-            lines.append("**Notes:**")
-            for n in ga.notes:
-                lines.append(f"- {n}")
-        lines.append("")
-        lines.append("> Ghidra results provide deeper visibility into native code. "
-                     "Follow up with manual reverse engineering in the Ghidra GUI "
-                     "for functions of interest.")
-    else:
+
+    if not ga.available:
         lines.append(f"_Ghidra analysis unavailable: {ga.error}_")
+        lines.append("")
+        return
+
+    lines.append(f"- **Binaries analyzed:** {len(ga.analyzed_binaries)}")
+    lines.append(f"- **Structured exports:** {len(r.native_analysis)}")
+    for b in ga.analyzed_binaries:
+        lines.append(f"    - `{b}`")
+    lines.append("")
+
+    # Structured native analysis results
+    if r.native_analysis:
+        lines.append("### Native Analysis Overview")
+        lines.append("")
+        lines.append("| Binary | Arch | Functions | Strings | Imports | Exports | JNI |")
+        lines.append("|--------|------|-----------|---------|---------|---------|-----|")
+        for na in r.native_analysis:
+            jni_count = len(na.jni_exports)
+            name = na.binary_path.rsplit("/", 1)[-1] if "/" in na.binary_path else na.binary_path
+            lines.append(
+                f"| `{name}` | {na.architecture} | {na.function_count} | "
+                f"{na.string_count} | {na.import_count} | {na.export_count} | {jni_count} |"
+            )
+        lines.append("")
+
+        # JNI exports
+        all_jni = [(na.binary_path, e) for na in r.native_analysis for e in na.jni_exports]
+        if all_jni:
+            lines.append("### JNI Exports")
+            lines.append("")
+            lines.append("> JNI exports are Java-to-native bridge functions. Malware frequently "
+                         "uses JNI to hide sensitive logic (decryption, C2, anti-analysis) in "
+                         "native code where Java-level decompilers have no visibility.")
+            lines.append("")
+            lines.append("| Binary | Export | Address |")
+            lines.append("|--------|--------|---------|")
+            for binary_path, export in all_jni[:30]:
+                bname = binary_path.rsplit("/", 1)[-1] if "/" in binary_path else binary_path
+                lines.append(f"| `{bname}` | `{export.name}` | `{export.address}` |")
+            if len(all_jni) > 30:
+                lines.append(f"| ... | {len(all_jni) - 30} more | |")
+            lines.append("")
+
+        # Suspicious indicators
+        all_suspicious = [
+            (na.binary_path, fn)
+            for na in r.native_analysis
+            for fn in na.suspicious_functions
+        ]
+        if all_suspicious:
+            lines.append("### Suspicious Native Indicators")
+            lines.append("")
+            lines.append("> **Observed Evidence:** The following function names and strings "
+                         "match patterns associated with anti-analysis, cryptography, or "
+                         "dynamic loading. Each requires analyst verification.")
+            lines.append("")
+            for binary_path, indicator in all_suspicious[:30]:
+                bname = binary_path.rsplit("/", 1)[-1] if "/" in binary_path else binary_path
+                lines.append(f"- `{bname}`: `{indicator}`")
+            if len(all_suspicious) > 30:
+                lines.append(f"- _...{len(all_suspicious) - 30} more indicators_")
+            lines.append("")
+
+        # Suspicious imports (crypto, anti-analysis related)
+        suspicious_imports = []
+        import re
+        import_pattern = re.compile(
+            r"ptrace|dlopen|dlsym|exec|system|popen|fork|"
+            r"AES|DES|RSA|EVP_|SHA|MD5|HMAC|crypt|cipher|"
+            r"frida|xposed|magisk|substrate",
+            re.IGNORECASE,
+        )
+        for na in r.native_analysis:
+            for imp in na.imports:
+                if import_pattern.search(imp.name):
+                    suspicious_imports.append((na.binary_path, imp))
+        if suspicious_imports:
+            lines.append("### Notable Native Imports")
+            lines.append("")
+            lines.append("| Binary | Import | Library |")
+            lines.append("|--------|--------|---------|")
+            for binary_path, imp in suspicious_imports[:25]:
+                bname = binary_path.rsplit("/", 1)[-1] if "/" in binary_path else binary_path
+                lines.append(f"| `{bname}` | `{imp.name}` | `{imp.namespace}` |")
+            lines.append("")
+
+    # Legacy / fallback suspicious symbols (from stdout-based analysis)
+    elif ga.suspicious_symbols:
+        lines.append("**Suspicious symbols / references:**")
+        lines.append("")
+        for sym in ga.suspicious_symbols[:20]:
+            lines.append(f"- `{sym}`")
+        lines.append("")
+
+    if ga.notes:
+        lines.append("**Analysis notes:**")
+        for n in ga.notes:
+            lines.append(f"- {n}")
+        lines.append("")
+
+    lines.append("### Native Analysis Limitations")
+    lines.append("")
+    lines.append("- Ghidra headless analysis provides function-level visibility but does "
+                 "not produce full decompilation output.")
+    lines.append("- Suspicious indicators are pattern-matched and require analyst verification.")
+    lines.append("- Packed or encrypted native code may not yield meaningful analysis.")
+    lines.append("- For functions of interest, follow up with interactive Ghidra GUI analysis.")
+    if r.native_analysis:
+        lines.append("- Structured JSON evidence is stored alongside the analysis output "
+                     "for reproducibility.")
     lines.append("")
 
 

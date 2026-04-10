@@ -96,7 +96,7 @@ def _result_ghidra_unavailable() -> ApkAnalysisResult:
 
 def test_report_contains_ghidra_section() -> None:
     md = render_apk_markdown(_result_with_ghidra())
-    assert "## Ghidra Deeper Analysis" in md
+    assert "## Ghidra Native Analysis" in md
     assert "static fact" in md
     assert "libnative.so" in md
     assert "decrypt_dex" in md
@@ -110,7 +110,7 @@ def test_report_ghidra_omitted_when_not_requested() -> None:
 
 def test_report_ghidra_shows_error_when_unavailable() -> None:
     md = render_apk_markdown(_result_ghidra_unavailable())
-    assert "## Ghidra Deeper Analysis" in md
+    assert "## Ghidra Native Analysis" in md
     assert "unavailable" in md
     assert "Ghidra not installed" in md
 
