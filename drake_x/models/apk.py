@@ -158,6 +158,50 @@ class CampaignAssessment(BaseModel):
     notes: str = ""
 
 
+class VtEnrichment(BaseModel):
+    """VirusTotal enrichment data for a sample (opt-in, external intel)."""
+
+    available: bool = False
+    sha256: str = ""
+    detection_ratio: str = ""          # e.g. "42/72"
+    detections: int = 0
+    total_engines: int = 0
+    scan_date: str = ""
+    popular_threat_label: str = ""
+    suggested_threat_label: str = ""
+    tags: list[str] = Field(default_factory=list)
+    top_detections: list[dict[str, str]] = Field(default_factory=list)
+    error: str | None = None
+    source_label: str = "virustotal_v3_api"
+
+
+class FridaHookTarget(BaseModel):
+    """One candidate for Frida dynamic validation — NOT an auto-bypass."""
+
+    target_class: str = ""
+    target_method: str = ""
+    protection_type: str = ""
+    evidence_basis: list[str] = Field(default_factory=list)
+    expected_observation: str = ""
+    analyst_notes: str = ""
+    suggested_validation_objective: str = ""
+    priority: Literal["high", "medium", "low"] = "medium"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+
+
+class GhidraAnalysis(BaseModel):
+    """Results from optional Ghidra headless deeper analysis."""
+
+    available: bool = False
+    analyzed_binaries: list[str] = Field(default_factory=list)
+    function_names: list[str] = Field(default_factory=list)
+    suspicious_symbols: list[str] = Field(default_factory=list)
+    native_strings: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+    error: str | None = None
+    source_label: str = "ghidra_headless"
+
+
 # ---------------------------------------------------------------------------
 # Top-level analysis result
 # ---------------------------------------------------------------------------
@@ -212,6 +256,15 @@ class ApkAnalysisResult(BaseModel):
 
     # Phase 7 — campaign similarity
     campaign_assessments: list[CampaignAssessment] = Field(default_factory=list)
+
+    # VT enrichment (opt-in, external intel)
+    vt_enrichment: VtEnrichment = Field(default_factory=VtEnrichment)
+
+    # Frida dynamic validation targets (analyst-assisted, not auto-bypass)
+    frida_targets: list[FridaHookTarget] = Field(default_factory=list)
+
+    # Ghidra deeper analysis (opt-in)
+    ghidra_analysis: GhidraAnalysis = Field(default_factory=GhidraAnalysis)
 
     # Warnings accumulated during analysis
     warnings: list[str] = Field(default_factory=list)

@@ -50,7 +50,81 @@ drake apk analyze sample.apk --no-jadx
 
 # Deep mode (more time, more coverage)
 drake apk analyze sample.apk --deep
+
+# With VirusTotal enrichment (requires API key in workspace config)
+drake apk analyze sample.apk -w my-engagement --vt
+
+# With Ghidra deeper analysis on native libraries
+drake apk analyze sample.apk --ghidra
+
+# Full pipeline: VT + Ghidra + radare2
+drake apk analyze sample.apk -w my-engagement --vt --ghidra --radare2
 ```
+
+### Ghidra integration (opt-in)
+
+Ghidra provides deeper static analysis of native `.so` libraries that
+jadx and apktool cannot decompile. Enable it with `--ghidra`.
+
+**Prerequisites:**
+
+```bash
+# Install Ghidra on Kali
+sudo apt install -y ghidra
+# OR set the environment variable
+export GHIDRA_INSTALL_DIR=/opt/ghidra
+```
+
+**What it does:**
+
+- Runs `analyzeHeadless` on each `.so` in the APK's `lib/` directory
+- Extracts function names, symbols, and string references
+- Identifies suspicious symbols (decrypt, anti-debug, root check, etc.)
+- Feeds results into the behavior and obfuscation analyzers
+- Results are labeled as `ghidra_headless` source in the report
+
+**When to use it:**
+
+- When the APK contains native libraries with anti-analysis logic
+- When jadx fails to decompile obfuscated code
+- When embedded payloads need deeper inspection
+- When you need better targets for Frida dynamic validation
+
+**Graceful degradation:** If Ghidra is not installed, the `--ghidra`
+flag produces a warning and the pipeline continues without it.
+
+### VirusTotal enrichment (opt-in)
+
+To enable VT hash lookup, add your API key to the workspace config:
+
+```toml
+# In <workspace>/workspace.toml
+[virustotal]
+api_key = "your-vt-api-key-here"
+```
+
+Then pass `--vt` when running analysis. VT enrichment:
+
+- Performs a **read-only hash lookup** (GET by SHA-256). Never uploads.
+- Is fully optional — the pipeline runs without it.
+- Degrades gracefully on network errors, rate limits, or missing key.
+- Is labeled as **external intel enrichment** in the report.
+
+### Frida Dynamic Validation Targets
+
+The analysis automatically generates Frida hook candidates when
+protections or suspicious behaviors are detected. These are **not**
+auto-bypass scripts — they are investigative starting points for an
+analyst working in a controlled lab.
+
+Each target includes:
+- `target_class` / `target_method` — the Java/JNI symbol to hook
+- `protection_type` — what protection or behavior it relates to
+- `evidence_basis` — static evidence that led to this suggestion
+- `expected_observation` — what the analyst should see
+- `suggested_validation_objective` — what the hook confirms
+- `analyst_notes` — practical guidance
+- `priority` / `confidence`
 
 ## Analysis Phases
 
@@ -132,17 +206,43 @@ Produces:
 
 1. Executive Summary
 2. Methodology
-3. Surface Analysis (hashes, permissions, components)
-4. Static Analysis (behavior indicators, native libs, embedded files)
-5. Campaign Objective Assessment
-6. Obfuscation Analysis
-7. Hidden Business Logic (communication, exfiltration, triggers)
-8. Protection Detection and Dynamic-Analysis Considerations
-9. Indicators and Extracted Artifacts (network IOCs, file inventory)
-10. Conclusions
-11. Analyst Next Steps
+3. VirusTotal Enrichment (opt-in, labeled as external intel)
+4. Surface Analysis (hashes, permissions, components)
+5. Static Analysis (behavior indicators, native libs, embedded files)
+6. Campaign Objective Assessment
+7. Obfuscation Analysis
+8. Hidden Business Logic (communication, exfiltration, triggers)
+9. Protection Detection and Dynamic-Analysis Considerations
+10. Frida Dynamic Validation Targets (labeled as dynamic hypothesis)
+11. Indicators and Extracted Artifacts (network IOCs, file inventory)
+12. Conclusions and Recommendations
+13. Analyst Next Steps
+
+### PDF export
+
+Drake-X does not include a built-in PDF renderer. The canonical report
+formats are Markdown and JSON. To produce a PDF:
+
+```bash
+# Using pandoc (commonly available on Kali)
+pandoc apk_report.md -o apk_report.pdf --pdf-engine=xelatex
+
+# Using wkhtmltopdf via markdown conversion
+grip apk_report.md --export apk_report.html && wkhtmltopdf apk_report.html apk_report.pdf
+```
+
+The Markdown structure is designed to render cleanly in PDF converters.
 
 ## Evidence classification
+
+The report uses four explicit evidence categories:
+
+| Category | Label in report | Source | Example |
+|---|---|---|---|
+| **Static fact** | (default in Sections 3–5) | Tool output or parser | "Permission READ_SMS declared" |
+| **Analytic assessment** | Section 6 (campaign) | Inference from observed traits | "consistent with dropper" |
+| **External intel enrichment** | VT section | VirusTotal API response | "42/72 detection ratio" |
+| **Dynamic hypothesis** | Frida targets section | Static evidence → validation plan | "Hook File.exists() for su check" |
 
 Every major conclusion in the report includes:
 

@@ -53,7 +53,9 @@ def run_analysis(
     use_apktool: bool = True,
     use_strings: bool = True,
     use_radare2: bool = False,
+    use_ghidra: bool = False,
     deep: bool = False,
+    vt_api_key: str = "",
 ) -> ApkAnalysisResult:
     """Run the full 8-phase APK analysis and return a structured result."""
 
@@ -77,6 +79,20 @@ def run_analysis(
         sha256=hashes["sha256"],
         file_type=file_type,
     )
+
+    # VT enrichment (opt-in, after hashes are computed)
+    if vt_api_key:
+        log.info("VT enrichment: querying VirusTotal for %s", hashes["sha256"][:12])
+        try:
+            from ..integrations.apk.virustotal import lookup_sha256
+            result.vt_enrichment = lookup_sha256(hashes["sha256"], api_key=vt_api_key)
+            if result.vt_enrichment.available and not result.vt_enrichment.error:
+                result.tools_ran.append("virustotal")
+            elif result.vt_enrichment.error:
+                result.warnings.append(f"VT enrichment degraded: {result.vt_enrichment.error}")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("VT enrichment failed: %s", exc)
+            result.warnings.append(f"VT enrichment failed: {exc}")
 
     # ------------------------------------------------------------------
     # Phase 2 — Manifest and surface analysis
@@ -190,6 +206,49 @@ def run_analysis(
         elif not r2.available:
             result.tools_skipped.append("rabin2")
 
+    # Ghidra deeper analysis (opt-in)
+    if use_ghidra:
+        from ..integrations.apk.ghidra import analyze_native_libs, is_available as ghidra_available
+        from ..models.apk import GhidraAnalysis
+        if ghidra_available():
+            log.info("Phase 3b: Ghidra headless analysis")
+            ghidra_dir = work / "ghidra"
+            ghidra_results = analyze_native_libs(raw_dir, ghidra_dir, timeout=600)
+            analyzed = []
+            ghidra_strings: list[str] = []
+            suspicious: list[str] = []
+            notes: list[str] = []
+            for rel_path, gout in ghidra_results.items():
+                analyzed.append(rel_path)
+                if gout.ok:
+                    # Extract suspicious symbols from Ghidra output
+                    for line in gout.stdout.splitlines():
+                        lower = line.lower()
+                        if any(kw in lower for kw in ["decrypt", "cipher", "obfuscat", "anti", "frida",
+                                                       "root", "emulat", "debug", "inject", "hook",
+                                                       "dex", "loader", "reflect"]):
+                            suspicious.append(line.strip()[:150])
+                    ghidra_strings.append(gout.stdout)
+                else:
+                    notes.append(f"{rel_path}: {gout.error or 'analysis failed'}")
+
+            result.ghidra_analysis = GhidraAnalysis(
+                available=True,
+                analyzed_binaries=analyzed,
+                suspicious_symbols=suspicious[:50],
+                native_strings=[s[:200] for s in ghidra_strings[:5]],
+                notes=notes,
+            )
+            result.tools_ran.append("ghidra")
+            # Feed Ghidra output into the corpus for behavior/obfuscation analysis
+            strings_text += "\n".join(ghidra_strings) + "\n"
+        else:
+            result.ghidra_analysis = GhidraAnalysis(
+                available=False, error="Ghidra not installed. Set GHIDRA_INSTALL_DIR or install Ghidra."
+            )
+            result.tools_skipped.append("ghidra")
+            result.warnings.append("--ghidra requested but Ghidra not found on this host")
+
     # Build a combined text corpus for analysis
     corpus = "\n".join([smali_text, java_text, strings_text, manifest_xml])
 
@@ -232,10 +291,21 @@ def run_analysis(
     log.info("Phase 7: campaign similarity")
     result.campaign_assessments = assess_campaigns(result)
 
-    log.info("Analysis complete: %d findings, %d network IOCs, %d protections",
+    # ------------------------------------------------------------------
+    # Phase 7b — Frida dynamic validation targets
+    # ------------------------------------------------------------------
+    log.info("Phase 7b: frida validation targets")
+    try:
+        from ..normalize.apk.frida_targets import generate_frida_targets
+        result.frida_targets = generate_frida_targets(result)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Frida target generation failed: %s", exc)
+
+    log.info("Analysis complete: %d findings, %d network IOCs, %d protections, %d frida targets",
              len(result.behavior_indicators),
              len(result.network_indicators),
-             len(result.protection_indicators))
+             len(result.protection_indicators),
+             len(result.frida_targets))
     return result
 
 

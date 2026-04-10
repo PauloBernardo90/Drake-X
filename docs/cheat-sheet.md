@@ -112,10 +112,36 @@ Static analysis:
 drake apk analyze ./sample.apk
 drake apk analyze ./sample.apk -w <workspace>
 drake apk analyze ./sample.apk -o ./apk-output
+drake apk analyze ./sample.apk -w <workspace> --vt
+drake apk analyze ./sample.apk -w <workspace> --ghidra
+drake apk analyze ./sample.apk -w <workspace> --vt --ghidra
 drake apk analyze ./sample.apk --radare2
 drake apk analyze ./sample.apk --no-jadx
 drake apk analyze ./sample.apk --deep
+drake apk analyze ./sample.apk -w <workspace> --vt --ghidra --radare2 --deep
 ```
+
+VirusTotal enrichment:
+
+```toml
+[virustotal]
+api_key = "YOUR_VT_API_KEY"
+```
+
+Store the VirusTotal API key in the workspace config at
+`~/.drake-x/workspaces/<workspace>/workspace.toml`.
+Do not hardcode secrets in the repository or source files.
+
+Environment fallback:
+
+```bash
+export VT_API_KEY="your_vt_api_key"
+drake apk analyze ./sample.apk -w <workspace> --vt
+```
+
+Resolution order:
+1. `[virustotal].api_key` in `workspace.toml`
+2. `VT_API_KEY` environment variable
 
 ## Findings
 

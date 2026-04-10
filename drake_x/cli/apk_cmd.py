@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import typer
@@ -31,6 +32,8 @@ def analyze(
     jadx: bool = typer.Option(True, "--jadx/--no-jadx", help="Decompile with jadx."),
     apktool: bool = typer.Option(True, "--apktool/--no-apktool", help="Decompile with apktool."),
     radare2: bool = typer.Option(False, "--radare2", help="Run rabin2 analysis."),
+    ghidra: bool = typer.Option(False, "--ghidra", help="Run Ghidra headless deeper analysis on native libraries."),
+    vt: bool = typer.Option(False, "--vt", help="Enable VirusTotal hash lookup (requires API key in workspace config)."),
 ) -> None:
     """Run static analysis on an Android APK file.
 
@@ -66,6 +69,16 @@ def analyze(
     info(console, f"sample:     [accent]{apk_file}[/accent]")
     info(console, f"output dir: [accent]{work_dir}[/accent]")
 
+    # Resolve VT API key
+    vt_api_key = ""
+    if vt:
+        if ws:
+            vt_api_key = ws.config.vt_api_key
+        if not vt_api_key:
+            vt_api_key = os.environ.get("VT_API_KEY", "")
+        if not vt_api_key:
+            warn(console, "--vt requested but no api_key in workspace [virustotal] config and no VT_API_KEY env var")
+
     # Run analysis
     try:
         result = run_analysis(
@@ -75,7 +88,9 @@ def analyze(
             use_apktool=apktool,
             use_strings=strings,
             use_radare2=radare2,
+            use_ghidra=ghidra,
             deep=deep,
+            vt_api_key=vt_api_key,
         )
     except Exception as exc:
         error(console, f"analysis failed: {exc}")
@@ -141,6 +156,15 @@ def analyze(
     info(console, f"behaviors:     {len(result.behavior_indicators)}")
     info(console, f"network IOCs:  {len(result.network_indicators)}")
     info(console, f"protections:   {len([p for p in result.protection_indicators if p.status.value != 'not_observed'])}")
+    info(console, f"frida targets: {len(result.frida_targets)}")
+    if result.ghidra_analysis.available:
+        info(console, f"ghidra:        {len(result.ghidra_analysis.analyzed_binaries)} binary(ies) analyzed")
+    elif ghidra:
+        warn(console, f"ghidra:        {result.ghidra_analysis.error or 'unavailable'}")
+    if result.vt_enrichment.available:
+        info(console, f"VT detection:  {result.vt_enrichment.detection_ratio}")
+    elif vt:
+        warn(console, f"VT enrichment: {result.vt_enrichment.error or 'unavailable'}")
     info(console, f"findings:      {len(findings)}")
     graph_stats = graph.stats()
     info(console, f"evidence graph: {graph_stats['total_nodes']} nodes, {graph_stats['total_edges']} edges")

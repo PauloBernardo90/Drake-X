@@ -58,3 +58,6 @@ drake_x.db
 drake_x_runs/
 output/
 *.log
+
+# Local reference material
+*.pdf

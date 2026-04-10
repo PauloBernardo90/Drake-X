@@ -6,21 +6,23 @@ installs and packaged distributions.
 
 Display rules:
 
-- The full ASCII art is shown only when stdout is a TTY **and** the
-  terminal is at least :data:`BANNER_MIN_WIDTH` columns wide.
+- A compact animated wordmark is shown only when stdout is a TTY **and**
+  the terminal is at least :data:`BANNER_MIN_WIDTH` columns wide.
 - On narrower terminals, the compact branded panel
   (:func:`drake_x.cli_theme.render_header`) is shown instead.
 - On non-TTY output (piped, redirected, CI) the banner is suppressed
   entirely to keep machine-parseable output clean.
 
-The module is deliberately small and self-contained. It catches every
-exception internally so a missing or corrupt banner file never crashes
-the CLI.
+The animation is intentionally subtle: a short line-by-line reveal that
+adds presence without turning startup into a spectacle. The module is
+deliberately small and self-contained. It catches every exception
+internally so a missing or corrupt banner file never crashes the CLI.
 """
 
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 from rich.console import Console
@@ -31,9 +33,14 @@ from ..logging import get_logger
 
 log = get_logger("banner")
 
-#: Minimum terminal width (columns) required to render the full ASCII art
-#: without wrapping. Below this threshold we fall back to the compact panel.
-BANNER_MIN_WIDTH: int = 172
+#: Minimum terminal width (columns) required to render the animated
+#: wordmark without wrapping. Below this threshold we fall back to the
+#: compact panel.
+BANNER_MIN_WIDTH: int = 86
+
+#: Delay per rendered banner line. Kept intentionally small so the
+#: startup still feels fast in interactive use.
+_REVEAL_DELAY_S: float = 0.012
 
 #: Resolved path to the banner file shipped inside the package.
 _BANNER_PATH: Path = Path(__file__).resolve().parents[1] / "assets" / "banner.txt"
@@ -64,8 +71,31 @@ def render_banner(console: Console) -> None:
 
     banner_text = load_banner_text()
     if banner_text and console.width >= BANNER_MIN_WIDTH:
-        # Render in the brand accent color so it matches the CLI theme.
-        console.print(f"[bright_cyan]{banner_text}[/bright_cyan]", highlight=False)
+        _render_reveal(console, banner_text)
     else:
         # Narrow terminal or missing file — compact panel.
         render_header(console, version=__version__)
+
+
+def _render_reveal(console: Console, banner_text: str) -> None:
+    """Render the startup wordmark with a restrained line reveal.
+
+    This keeps the first impression more deliberate than a static wall of
+    ASCII while staying fast enough for normal CLI use.
+    """
+    lines = [line.rstrip() for line in banner_text.splitlines() if line.strip()]
+    if not lines:
+        render_header(console, version=__version__)
+        return
+
+    # Use the same accent family as the rest of the CLI, with slightly
+    # dimmer supporting lines so the central wordmark carries the visual
+    # weight.
+    for idx, line in enumerate(lines):
+        style = "bright_cyan" if 0 < idx < len(lines) - 2 else "cyan"
+        console.print(f"[{style}]{line}[/{style}]", highlight=False)
+        time.sleep(_REVEAL_DELAY_S)
+
+    console.print(
+        f"[muted]  v{__version__}  ·  authorized use only  ·  operator-driven[/muted]"
+    )

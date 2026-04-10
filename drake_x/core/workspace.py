@@ -45,6 +45,7 @@ class WorkspaceConfig:
     ollama_model: str = "llama3.2:1b"
     default_timeout: int = 180
     default_module: str = "recon_passive"
+    vt_api_key: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_toml(self) -> str:
@@ -70,6 +71,9 @@ class WorkspaceConfig:
         lines.append("[engine]")
         lines.append(f"default_timeout = {self.default_timeout}")
         lines.append(f'default_module = "{self.default_module}"')
+        lines.append("")
+        lines.append("[virustotal]")
+        lines.append(f'api_key = "{self.vt_api_key}"')
         lines.append("")
         return "\n".join(lines) + "\n"
 
@@ -227,7 +231,8 @@ def _load_workspace_config(path: Path) -> WorkspaceConfig:
         ollama_model=str(ai.get("ollama_model", "llama3.2:1b")),
         default_timeout=int(engine.get("default_timeout", 180)),
         default_module=str(engine.get("default_module", "recon_passive")),
-        extra={k: v for k, v in data.items() if k not in {"name", "ai", "engine", "created_at", "operator", "notes"}},
+        vt_api_key=str((data.get("virustotal") or {}).get("api_key", "")),
+        extra={k: v for k, v in data.items() if k not in {"name", "ai", "engine", "virustotal", "created_at", "operator", "notes"}},
     )
 
 
