@@ -1,4 +1,9 @@
-"""Drake-X command-line interface (Typer)."""
+"""Drake-X command-line interface (Typer).
+
+All visual styling (colors, panels, the brand header) lives in
+:mod:`drake_x.cli_theme`. This module wires Typer commands to the
+orchestrator and delegates presentation.
+"""
 
 from __future__ import annotations
 
@@ -8,11 +13,21 @@ import sys
 from pathlib import Path
 
 import typer
-from rich.console import Console
-from rich.table import Table
 
+from . import __version__
 from .ai.analyzer import AIAnalyzer
 from .ai.ollama_client import OllamaClient
+from .cli_theme import (
+    build_tools_table,
+    error,
+    format_tool_installed,
+    info,
+    make_console,
+    render_header,
+    render_scan_summary,
+    success,
+    warn,
+)
 from .config import DrakeXConfig, load_config
 from .constants import (
     ALL_PROFILES,
@@ -33,20 +48,25 @@ from .reports.markdown import render_markdown_report
 from .scope import parse_target
 from .session_store import SessionStore
 
+# Typer renders its own help text via an internal Console that does not see
+# our theme, so the ``help`` string below uses plain Rich style names rather
+# than theme style names. Everything we print ourselves goes through
+# ``console`` below, which *is* theme-aware.
 app = typer.Typer(
     name="drake-x",
     add_completion=False,
     no_args_is_help=True,
     rich_markup_mode="rich",
     help=(
-        f"[bold]{APP_DISPLAY_NAME}[/bold] — local CLI reconnaissance assistant.\n\n"
-        f"[red]{AUTHORIZED_USE_NOTICE}[/red]\n\n"
+        f"[bold cyan]{APP_DISPLAY_NAME}[/bold cyan] — "
+        "local CLI reconnaissance assistant.\n\n"
+        f"[bold yellow]{AUTHORIZED_USE_NOTICE}[/bold yellow]\n\n"
         "Drake-X orchestrates locally installed Kali tools and (optionally) "
         "asks a local Ollama model for triage. It does not perform exploitation."
     ),
 )
 
-console = Console()
+console = make_console()
 log = get_logger("cli")
 
 
@@ -67,7 +87,7 @@ def _build_config(
     try:
         cfg = load_config()
     except ConfigurationError as exc:
-        console.print(f"[red]Configuration error:[/red] {exc}")
+        error(console, f"Configuration error: {exc}")
         raise typer.Exit(code=2) from exc
 
     cfg = cfg.with_overrides(
@@ -90,7 +110,7 @@ def _build_components(cfg: DrakeXConfig) -> tuple[ToolRegistry, SessionStore, Or
     try:
         store = SessionStore(cfg.db_path)
     except StorageError as exc:
-        console.print(f"[red]Storage error:[/red] {exc}")
+        error(console, f"Storage error: {exc}")
         raise typer.Exit(code=2) from exc
 
     ai = None
@@ -138,17 +158,28 @@ def scan(
     )
 
     if cfg.default_profile not in ALL_PROFILES:
-        console.print(f"[red]Invalid profile:[/red] {cfg.default_profile}")
+        error(console, f"Invalid profile: {cfg.default_profile}")
         raise typer.Exit(code=2)
 
     try:
         parsed_target = parse_target(target)
     except InvalidTargetError as exc:
-        console.print(f"[red]Invalid target:[/red] {exc}")
+        error(console, f"Invalid target: {exc}")
         raise typer.Exit(code=2) from exc
     except ScopeViolationError as exc:
-        console.print(f"[red]Refused to scan:[/red] {exc}")
+        error(console, f"Refused to scan: {exc}")
         raise typer.Exit(code=2) from exc
+
+    # Brand header shown only in interactive (non-JSON) mode so JSON output
+    # stays machine-parseable on stdout.
+    if not json_out:
+        render_header(console, version=__version__)
+        info(
+            console,
+            f"target [accent]{parsed_target.canonical}[/accent] "
+            f"[muted]({parsed_target.target_type})[/muted]  ·  "
+            f"profile [accent.secondary]{cfg.default_profile}[/accent.secondary]",
+        )
 
     registry, store, orchestrator = _build_components(cfg)
 
@@ -159,9 +190,11 @@ def scan(
         except Exception:  # noqa: BLE001
             ai_reachable = False
         if not ai_reachable:
-            console.print(
-                f"[yellow]Ollama not reachable at {cfg.ollama_url}; continuing without AI.[/yellow]"
-            )
+            if not json_out:
+                warn(
+                    console,
+                    f"Ollama not reachable at {cfg.ollama_url}; continuing without AI",
+                )
             ai_enabled_request = False
 
     try:
@@ -174,7 +207,7 @@ def scan(
             )
         )
     except DrakeXError as exc:
-        console.print(f"[red]Scan failed:[/red] {exc}")
+        error(console, f"Scan failed: {exc}")
         raise typer.Exit(code=1) from exc
 
     report_path: Path | None = None
@@ -186,7 +219,7 @@ def scan(
     if json_out:
         _print_json_summary(report, report_path)
     else:
-        _print_pretty_summary(report, report_path)
+        render_scan_summary(console, report, report_path, AUTHORIZED_USE_NOTICE)
 
 
 # ----- tools list ------------------------------------------------------------
@@ -214,27 +247,21 @@ def tools_list(
     )
     registry = ToolRegistry(default_timeout=cfg.default_timeout)
 
-    table = Table(title=f"{APP_DISPLAY_NAME} — supported tools")
-    table.add_column("Tool", style="bold")
-    table.add_column("Installed")
-    table.add_column("Profiles")
-    table.add_column("Targets")
-    table.add_column("Description")
-
+    table = build_tools_table()
     for entry in registry.all_entries():
-        installed = "[green]yes[/green]" if entry.installed else "[red]no[/red]"
         table.add_row(
             entry.name,
-            installed,
+            format_tool_installed(entry.installed),
             ", ".join(entry.profiles),
             ", ".join(entry.target_types),
             entry.description,
         )
 
+    render_header(console, version=__version__)
+    console.print()
     console.print(table)
-    console.print(
-        f"[dim]{AUTHORIZED_USE_NOTICE}[/dim]"
-    )
+    console.print()
+    console.print(f"[notice]{AUTHORIZED_USE_NOTICE}[/notice]")
 
 
 # ----- report ----------------------------------------------------------------
@@ -263,12 +290,12 @@ def report(
     try:
         store = SessionStore(cfg.db_path)
     except StorageError as exc:
-        console.print(f"[red]Storage error:[/red] {exc}")
+        error(console, f"Storage error: {exc}")
         raise typer.Exit(code=2) from exc
 
     session = store.load_session(session_id)
     if session is None:
-        console.print(f"[red]Session not found:[/red] {session_id}")
+        error(console, f"Session not found: {session_id}")
         raise typer.Exit(code=1)
 
     tool_results = store.load_tool_results(session_id)
@@ -282,12 +309,14 @@ def report(
         findings=findings,
     )
 
+    # When writing to stdout we want the Markdown to be the *only* output so
+    # the command is safe to pipe. File output can show a short confirmation.
     if output is None:
         sys.stdout.write(md)
     else:
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(md, encoding="utf-8")
-        console.print(f"[green]Report written to[/green] {output}")
+        success(console, f"Report written to [accent]{output}[/accent]")
 
 
 # ----- helpers ---------------------------------------------------------------
@@ -311,35 +340,6 @@ def _write_markdown(cfg: DrakeXConfig, report: ScanReport) -> Path:
         encoding="utf-8",
     )
     return md_path
-
-
-def _print_pretty_summary(report: ScanReport, report_path: Path | None) -> None:
-    s = report.session
-    console.print()
-    console.print(f"[bold]Session:[/bold] {s.id}")
-    console.print(f"[bold]Target:[/bold] {s.target.canonical} ([dim]{s.target.target_type}[/dim])")
-    console.print(f"[bold]Profile:[/bold] {s.profile}")
-    console.print(f"[bold]Status:[/bold] {s.status.value}")
-    console.print(f"[bold]Tools ran:[/bold] {', '.join(s.tools_ran) or '—'}")
-    if s.tools_skipped:
-        console.print(f"[yellow]Skipped/missing:[/yellow] {', '.join(s.tools_skipped)}")
-    if s.warnings:
-        console.print("[yellow]Warnings:[/yellow]")
-        for w in s.warnings:
-            console.print(f"  • {w}")
-    console.print(f"[bold]Artifacts:[/bold] {len(report.artifacts)}")
-    if s.ai_enabled:
-        console.print(f"[bold]AI analysis:[/bold] enabled ({s.ai_model})")
-        if s.ai_summary:
-            console.print()
-            console.print("[bold underline]AI executive summary[/bold underline]")
-            console.print(s.ai_summary)
-    else:
-        console.print("[bold]AI analysis:[/bold] [dim]disabled[/dim]")
-    if report_path:
-        console.print(f"[green]Report:[/green] {report_path}")
-    console.print()
-    console.print(f"[dim]{AUTHORIZED_USE_NOTICE}[/dim]")
 
 
 def _print_json_summary(report: ScanReport, report_path: Path | None) -> None:
