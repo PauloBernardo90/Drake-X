@@ -1,5 +1,8 @@
 # Kali Linux setup
 
+See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
+[`usage.md`](usage.md), [`llm-setup.md`](llm-setup.md)
+
 Drake-X is designed to run natively on Kali Linux. The framework itself
 is pure Python 3, but it shells out to native Kali tools as subprocesses,
 so you'll get the most value from it on a Kali host where those tools

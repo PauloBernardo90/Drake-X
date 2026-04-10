@@ -1,8 +1,15 @@
 # Drake-X usage walkthrough
 
+See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
+[`kali-setup.md`](kali-setup.md), [`llm-setup.md`](llm-setup.md)
+
 This is the long-form companion to the README "Quick tour" section. It
 walks you through a realistic engagement from `drake init` through
 report generation.
+
+For the full docs index, see [`README.md`](README.md).
+If you want a compact command reference while following this guide, see
+[`cheat-sheet.md`](cheat-sheet.md).
 
 ## 1. Scaffold a workspace
 

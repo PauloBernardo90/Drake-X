@@ -1,5 +1,8 @@
 # Drake-X Operator Control (v0.6)
 
+See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
+[`architecture.md`](architecture.md), [`ux-layer.md`](ux-layer.md)
+
 Drake-X v0.6 introduces three capabilities focused on operator
 awareness, auditability, and workflow customization.
 

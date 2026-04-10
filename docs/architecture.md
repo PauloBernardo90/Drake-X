@@ -1,5 +1,8 @@
 # Drake-X Architecture
 
+See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
+[`safety.md`](safety.md), [`operator-control.md`](operator-control.md)
+
 This document describes how Drake-X is structured, how its components
 interact, and how the design principles are enforced in code. It is the
 reference for contributors and the source of truth when other documents

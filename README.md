@@ -212,6 +212,17 @@ drake findings show <finding-id> -w my-engagement
 ```
 
 See [`docs/usage.md`](docs/usage.md) for the full walkthrough.
+For a compact command reference, see [`docs/cheat-sheet.md`](docs/cheat-sheet.md).
+
+## Documentation
+
+- [`docs/README.md`](docs/README.md) — documentation index
+- [`docs/cheat-sheet.md`](docs/cheat-sheet.md) — compact CLI command reference
+- [`docs/usage.md`](docs/usage.md) — end-to-end usage walkthrough
+- [`docs/kali-setup.md`](docs/kali-setup.md) — Kali installation and setup
+- [`docs/llm-setup.md`](docs/llm-setup.md) — Ollama and local AI configuration
+- [`docs/architecture.md`](docs/architecture.md) — architecture and package layout
+- [`docs/safety.md`](docs/safety.md) — safety and scope enforcement
 
 ## Safety
 
@@ -241,6 +252,7 @@ ruff format drake_x tests
 
 See [`docs/architecture.md`](docs/architecture.md) for the package
 layout, engine lifecycle, storage schema, and extension guide.
+For a quick CLI reference, see [`docs/cheat-sheet.md`](docs/cheat-sheet.md).
 
 ## Non-goals
 

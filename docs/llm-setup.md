@@ -1,5 +1,8 @@
 # Local LLM setup
 
+See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
+[`kali-setup.md`](kali-setup.md), [`usage.md`](usage.md)
+
 Drake-X's AI layer is **local-only**. There is no remote AI client in
 the code, no API key support, and no telemetry. The optional LLM runs
 on the same Kali host via [Ollama](https://ollama.com/).
