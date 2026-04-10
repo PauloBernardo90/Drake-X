@@ -23,7 +23,7 @@ from . import _shared
 app = typer.Typer(no_args_is_help=True, help="Generate reports for stored sessions.")
 
 
-_FORMATS = ("md", "executive", "json", "manifest", "evidence")
+_FORMATS = ("md", "executive", "json", "manifest", "evidence", "pdf")
 
 
 @app.command("generate")
@@ -96,6 +96,26 @@ def generate(
         )
         body = write_manifest_json(manifest)
         default_name = "manifest.json"
+    elif format == "pdf":
+        # Generate Markdown first, then convert to PDF
+        body = render_markdown_report(
+            session=session, tool_results=tool_results,
+            artifacts=artifacts, findings=findings,
+        )
+        out_dir = ws.session_dir(session.id) if output is None else output.parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+        md_tmp = out_dir / "report.md"
+        md_tmp.write_text(body, encoding="utf-8")
+
+        pdf_target = output or (out_dir / "report.pdf")
+        from ..integrations.reporting.pandoc import markdown_to_pdf
+        ok, err = markdown_to_pdf(md_tmp, pdf_target, title=f"Drake-X Report — {session.id}")
+        if ok:
+            success(console, f"PDF report written to [accent]{pdf_target}[/accent]")
+        else:
+            error(console, f"PDF generation failed: {err}")
+            info(console, f"Markdown source saved at [accent]{md_tmp}[/accent]")
+        return
     else:  # evidence
         body = build_evidence_index(artifacts)
         default_name = "evidence_index.md"
