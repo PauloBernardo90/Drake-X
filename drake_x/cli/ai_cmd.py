@@ -34,12 +34,21 @@ def _load_context(storage: WorkspaceStorage, session_id: str) -> TaskContext | N
         return None
     artifacts = storage.legacy.load_artifacts(session_id)
     findings = storage.load_findings(session_id)
+
+    # Load the evidence graph and serialize it for AI context if present.
+    graph_context = None
+    graph = storage.load_evidence_graph(session_id)
+    if graph and graph.nodes:
+        from ..graph.context import serialize_graph_context
+        graph_context = serialize_graph_context(graph, max_nodes=30, max_chars=4000)
+
     return TaskContext(
         target_display=session.target.canonical,
         profile=session.profile,
         session_id=session_id,
         evidence=[a.model_dump(mode="json") for a in artifacts],
         findings=[f.model_dump(mode="json") for f in findings],
+        graph_context=graph_context,
     )
 
 

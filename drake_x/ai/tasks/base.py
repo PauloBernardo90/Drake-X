@@ -26,6 +26,12 @@ class TaskContext:
 
     The context intentionally does NOT carry the engagement scope file —
     AI prompts must never see authorization metadata.
+
+    ``graph_context`` is an optional dict produced by
+    :func:`drake_x.graph.context.serialize_graph_context`. When present,
+    the AI prompt includes structured graph relationships alongside the
+    flat evidence list. When absent, prompts fall back to the flat
+    evidence pipeline (backward-compatible with all v0.3/v0.4 tasks).
     """
 
     target_display: str
@@ -33,6 +39,7 @@ class TaskContext:
     session_id: str | None = None
     evidence: list[dict[str, Any]] = field(default_factory=list)
     findings: list[dict[str, Any]] = field(default_factory=list)
+    graph_context: dict[str, Any] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -92,11 +99,24 @@ class AITask:
 
     def _build_prompt(self, context: TaskContext) -> str:
         template = self._load_template(self.prompt_file)
+
+        # When graph context is available, prepend it as a structured
+        # EVIDENCE GRAPH section before the flat evidence. This gives the
+        # model relationship data alongside raw observations. If absent,
+        # the placeholder is empty — backward-compatible with all prompts.
+        graph_section = ""
+        if context.graph_context:
+            graph_section = (
+                "EVIDENCE GRAPH (structured relationships between findings):\n"
+                + json.dumps(context.graph_context, indent=2, default=str)
+                + "\n\n"
+            )
+
         return template.format(
             target_display=context.target_display,
             profile=context.profile,
             session_id=context.session_id or "(unknown)",
-            evidence_json=self._trim_json(context.evidence),
+            evidence_json=graph_section + self._trim_json(context.evidence),
             findings_json=self._trim_json(context.findings),
             observations_json=self._trim_json(context.evidence),
             schema_json=json.dumps(self.schema, indent=2),

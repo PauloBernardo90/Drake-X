@@ -16,11 +16,17 @@ from .banner import render_banner
 from . import (
     ai_cmd,
     api_cmd,
+    apk_cmd,
+    assist_cmd,
     findings_cmd,
+    flow_cmd,
+    graph_cmd,
     init_cmd,
+    mission_cmd,
     recon_cmd,
     report_cmd,
     scope_cmd,
+    status_cmd,
     tools_cmd,
     web_cmd,
 )
@@ -47,11 +53,17 @@ def _startup(ctx: typer.Context) -> None:
 
 
 # Register subcommand groups.
+app.add_typer(mission_cmd.app, name="mission")
+app.add_typer(assist_cmd.app, name="assist")
+app.add_typer(flow_cmd.app, name="flow")
+app.add_typer(status_cmd.app, name="status")
 app.add_typer(init_cmd.app, name="init")
 app.add_typer(scope_cmd.app, name="scope")
 app.add_typer(recon_cmd.app, name="recon")
 app.add_typer(web_cmd.app, name="web")
 app.add_typer(api_cmd.app, name="api")
+app.add_typer(apk_cmd.app, name="apk")
+app.add_typer(graph_cmd.app, name="graph")
 app.add_typer(findings_cmd.app, name="findings")
 app.add_typer(ai_cmd.app, name="ai")
 app.add_typer(report_cmd.app, name="report")

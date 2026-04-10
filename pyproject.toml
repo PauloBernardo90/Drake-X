@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drake-x"
-version = "0.3.0"
+version = "0.6.0"
 description = "Local-first offensive security framework for Kali Linux with local AI assistance and strict scope enforcement."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -60,11 +60,14 @@ packages = [
     "drake_x.cli",
     "drake_x.core",
     "drake_x.integrations",
+    "drake_x.integrations.apk",
     "drake_x.integrations.builtin",
     "drake_x.integrations.optional",
     "drake_x.models",
     "drake_x.modules",
+    "drake_x.graph",
     "drake_x.normalize",
+    "drake_x.normalize.apk",
     "drake_x.reporting",
     "drake_x.reports",
     "drake_x.safety",

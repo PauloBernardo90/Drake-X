@@ -12,6 +12,10 @@ Tasks never invoke tools. They take artifacts/findings as input and return
 either a structured result or ``None`` (degraded gracefully).
 """
 
+from .apk_assessment import ApkAssessmentTask
+from .apk_campaign import ApkCampaignTask
+from .apk_obfuscation import ApkObfuscationTask
+from .assist_suggest import AssistSuggestTask
 from .base import AITask, AITaskResult, TaskContext
 from .classify import ClassifyTask
 from .dedupe import DedupeTask
@@ -27,6 +31,10 @@ ALL_TASKS = (
     ObservationsTask,
     ReportDraftTask,
     DedupeTask,
+    ApkAssessmentTask,
+    ApkObfuscationTask,
+    ApkCampaignTask,
+    AssistSuggestTask,
 )
 
 __all__ = [
@@ -39,5 +47,9 @@ __all__ = [
     "NextStepsTask",
     "ObservationsTask",
     "ReportDraftTask",
+    "ApkAssessmentTask",
+    "ApkObfuscationTask",
+    "ApkCampaignTask",
+    "AssistSuggestTask",
     "ALL_TASKS",
 ]

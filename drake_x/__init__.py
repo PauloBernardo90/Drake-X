@@ -6,5 +6,5 @@ asks a local Ollama model for triage and classification. It does not perform
 exploitation, brute forcing, payload generation, or post-exploitation.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.6.0"
 __all__ = ["__version__"]

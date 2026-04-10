@@ -326,6 +326,16 @@ class Engine:
             for r in results
         ) or bool(session.warnings)
 
+        # Build and persist the evidence graph for this session.
+        try:
+            from ..normalize.web_graph import build_web_evidence_graph
+            graph = build_web_evidence_graph(
+                session=session, artifacts=artifacts, findings=findings,
+            )
+            self.storage.save_evidence_graph(session.id, graph)
+        except Exception as exc:  # noqa: BLE001 — graph is best-effort
+            log.warning("evidence graph build failed: %s", exc)
+
         session.mark_finished(partial=partial)
         self.storage.legacy.save_session(session)
         self._audit(

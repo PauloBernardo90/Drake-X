@@ -61,6 +61,35 @@ CREATE TABLE IF NOT EXISTS finding_extras (
 
 CREATE INDEX IF NOT EXISTS finding_extras_session_idx
     ON finding_extras(session_id);
+
+CREATE TABLE IF NOT EXISTS assist_sessions (
+    id TEXT PRIMARY KEY,
+    workspace TEXT NOT NULL,
+    domain TEXT NOT NULL,
+    target TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    ended_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS assist_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    assist_session_id TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    step_number INTEGER NOT NULL,
+    suggestion_json TEXT NOT NULL,
+    operator_action TEXT NOT NULL,
+    executed_command TEXT,
+    result_status TEXT,
+    FOREIGN KEY (assist_session_id) REFERENCES assist_sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS evidence_graphs (
+    session_id TEXT PRIMARY KEY,
+    graph_json TEXT NOT NULL,
+    node_count INTEGER NOT NULL DEFAULT 0,
+    edge_count INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
 """
 
 
@@ -235,6 +264,111 @@ class WorkspaceStorage:
             return findings
         # Fall back to the v1 store for legacy databases.
         return self.legacy.load_findings(session_id)
+
+    # ----- v2: assist sessions -------------------------------------------
+
+    def create_assist_session(
+        self, assist_id: str, workspace: str, domain: str, target: str, started_at: str,
+    ) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO assist_sessions (id, workspace, domain, target, started_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (assist_id, workspace, domain, target, started_at),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to create assist session: {exc}") from exc
+
+    def end_assist_session(self, assist_id: str, ended_at: str) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE assist_sessions SET ended_at = ? WHERE id = ?",
+                    (ended_at, assist_id),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to end assist session: {exc}") from exc
+
+    def log_assist_event(
+        self,
+        assist_session_id: str,
+        timestamp: str,
+        step_number: int,
+        suggestion_json: str,
+        operator_action: str,
+        executed_command: str | None = None,
+        result_status: str | None = None,
+    ) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT INTO assist_events "
+                    "(assist_session_id, timestamp, step_number, suggestion_json, "
+                    "operator_action, executed_command, result_status) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (assist_session_id, timestamp, step_number, suggestion_json,
+                     operator_action, executed_command, result_status),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to log assist event: {exc}") from exc
+
+    def load_assist_events(self, assist_session_id: str) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM assist_events WHERE assist_session_id = ? ORDER BY step_number ASC",
+                (assist_session_id,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_assist_sessions(self, limit: int = 20) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM assist_sessions ORDER BY started_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ----- v2: evidence graph -------------------------------------------
+
+    def save_evidence_graph(self, session_id: str, graph: "EvidenceGraph") -> None:
+        """Persist an evidence graph for a session."""
+        from ..models.evidence_graph import EvidenceGraph  # deferred to avoid circular
+
+        graph_json = graph.to_json()
+        stats = graph.stats()
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO evidence_graphs (session_id, graph_json, node_count, edge_count)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(session_id) DO UPDATE SET
+                        graph_json=excluded.graph_json,
+                        node_count=excluded.node_count,
+                        edge_count=excluded.edge_count
+                    """,
+                    (session_id, graph_json, stats["total_nodes"], stats["total_edges"]),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to persist evidence graph: {exc}") from exc
+
+    def load_evidence_graph(self, session_id: str) -> "EvidenceGraph | None":
+        """Load an evidence graph for a session, or ``None``."""
+        from ..models.evidence_graph import EvidenceGraph
+
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT graph_json FROM evidence_graphs WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            data = json.loads(row["graph_json"])
+            return EvidenceGraph.from_dict(data)
+        except (json.JSONDecodeError, KeyError):
+            return None
 
     # ----- internals ---------------------------------------------------
 

@@ -62,6 +62,29 @@ always win. Targets matching no in-scope rule are denied by default.
 sslscan. Real optional: httpx, ffuf. Stubs for future work: subfinder,
 amass, naabu, dnsx, nuclei, feroxbuster, eyewitness, testssl.
 
+**Mission workflows.** `drake mission run web/recon/apk/full <target>`
+orchestrates multi-step analysis with progress output, scope enforcement,
+and confirmation gating. See [`docs/ux-layer.md`](docs/ux-layer.md).
+
+**AI Assist.** `drake assist start <domain> <target>` provides a guided
+AI loop that suggests evidence-backed next steps, explains reasoning,
+and executes only with operator confirmation.
+
+**Flow navigation.** `drake flow` provides interactive menu-based
+navigation for operators who prefer not to memorize subcommand names.
+
+**Workspace observability.** `drake status` shows workspace info, scope
+summary, session history, findings severity breakdown, evidence graph
+stats, and tool availability in a single read-only command.
+
+**Audit-logged assist sessions.** Every Assist Mode suggest/confirm/
+execute/skip step is persisted. Review with `drake assist history` or
+export with `drake assist export`.
+
+**Custom mission templates.** Define operator workflows as TOML files
+in `<workspace>/missions/`. List, show, and execute with full scope
+enforcement. See [`docs/operator-control.md`](docs/operator-control.md).
+
 **Security headers audit.** Rule-based findings for missing HSTS, CSP,
 X-Frame-Options, X-Content-Type-Options, Referrer-Policy, cookie flags,
 and server version leaks. Each tagged with CWE and OWASP references.
@@ -83,6 +106,18 @@ for tracking attack-surface changes over time.
 
 **API inventory.** Parses operator-supplied OpenAPI/Swagger specs into
 structured endpoint inventories without making network calls.
+
+**APK static analysis.** Dedicated agent for Android malware analysis:
+manifest parsing, permission auditing, behavior detection, obfuscation
+assessment, protection detection, campaign similarity, and a structured
+11-section technical report. See [`docs/apk-analysis.md`](docs/apk-analysis.md).
+
+**Evidence Graph.** Structured relationships between findings, artifacts,
+indicators, and assessments. Nodes carry domain (web, apk), kind, and
+provenance. Edges encode derived_from, supports, related_to, and
+duplicate_of relationships. Persisted per-session, queryable via
+`drake graph show`, and consumed by AI tasks for graph-aware reasoning.
+See [`docs/evidence-model.md`](docs/evidence-model.md).
 
 **Auditability.** Every plan, run, denial, confirmation, and completion
 event is appended as a JSON line to `<workspace>/audit.log`. The
@@ -148,6 +183,9 @@ drake recon run example.com -m recon_active -w my-engagement --yes
 # Ingest an OpenAPI spec
 drake api ingest /path/to/openapi.json -w my-engagement
 
+# Static analysis of an Android APK
+drake apk analyze sample.apk -o ./apk-output
+
 # Generate reports
 drake report generate <session-id> -f md        -w my-engagement
 drake report generate <session-id> -f json      -w my-engagement
@@ -157,7 +195,13 @@ drake report generate <session-id> -f manifest  -w my-engagement
 # Compare two sessions
 drake report diff <session-a> <session-b> -w my-engagement
 
-# Run AI tasks (requires Ollama)
+# Explore the evidence graph
+drake graph show <session-id> -w my-engagement
+drake graph show <session-id> -w my-engagement --format summary
+drake graph show <session-id> -w my-engagement --node <node-id> --depth 2
+drake graph show <session-id> -w my-engagement --findings --format json
+
+# Run AI tasks (requires Ollama) — graph-aware when graph is present
 drake ai summarize    <session-id> -w my-engagement
 drake ai classify     <session-id> -w my-engagement
 drake ai dedupe       <session-id> -w my-engagement --apply

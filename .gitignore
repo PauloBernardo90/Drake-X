@@ -49,6 +49,9 @@ coverage.xml
 *.swo
 .DS_Store
 
+# Tool configuration
+.claude/
+
 # Drake-X runtime artifacts
 .env
 drake_x.db
