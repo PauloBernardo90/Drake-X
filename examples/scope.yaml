@@ -1,0 +1,37 @@
+# Example Drake-X engagement scope file.
+#
+# Copy this into your workspace at <workspace-root>/scope.yaml and tighten
+# it BEFORE running any active recon. Drake-X refuses to act on any target
+# that does not match an in_scope rule.
+
+engagement: example-bug-bounty
+authorization_reference: "HackerOne report 123456 / signed letter 2026-02-12"
+
+rate_limit_per_host_rps: 5.0
+max_concurrency: 4
+
+# Active modules are refused outright unless this is set to true. Even
+# then, Drake-X still requires interactive confirmation per active run.
+allow_active: false
+
+in_scope:
+  - kind: domain
+    value: example.com
+    notes: "Primary marketing site"
+  - kind: wildcard_domain
+    value: example.com
+    notes: "All *.example.com (subject to out_of_scope below)"
+  - kind: cidr
+    value: 198.51.100.0/24
+    notes: "Public-facing CIDR per HackerOne scope"
+  - kind: url_prefix
+    value: https://api.example.com/v2/
+    notes: "Public REST API v2"
+
+out_of_scope:
+  - kind: wildcard_domain
+    value: corp.example.com
+    notes: "Internal corporate; never in any external engagement"
+  - kind: domain
+    value: legacy.example.com
+    notes: "Legacy host frozen for retirement"

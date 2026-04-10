@@ -7,8 +7,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drake-x"
-version = "0.1.0"
-description = "CLI-based reconnaissance assistant for authorized security assessments."
+version = "0.3.0"
+description = "Local-first offensive security framework for Kali Linux with local AI assistance and strict scope enforcement."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
@@ -42,7 +42,7 @@ dev = [
 ]
 
 [project.scripts]
-drake-x = "drake_x.cli:app"
+drake = "drake_x.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/PauloBernardo90/Drake-X"
@@ -55,11 +55,25 @@ Repository = "https://github.com/PauloBernardo90/Drake-X"
 packages = [
     "drake_x",
     "drake_x.ai",
+    "drake_x.assets",
+    "drake_x.ai.tasks",
+    "drake_x.cli",
+    "drake_x.core",
+    "drake_x.integrations",
+    "drake_x.integrations.builtin",
+    "drake_x.integrations.optional",
     "drake_x.models",
+    "drake_x.modules",
     "drake_x.normalize",
+    "drake_x.reporting",
     "drake_x.reports",
+    "drake_x.safety",
     "drake_x.tools",
+    "drake_x.utils",
 ]
+
+[tool.setuptools.package-data]
+"drake_x.assets" = ["*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

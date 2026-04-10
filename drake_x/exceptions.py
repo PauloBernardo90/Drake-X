@@ -46,3 +46,28 @@ class AIUnavailableError(DrakeXError):
 
 class ConfigurationError(DrakeXError):
     """Raised on invalid runtime configuration."""
+
+
+class WorkspaceError(DrakeXError):
+    """Raised on workspace initialization or load failures."""
+
+
+class ScopeFileError(DrakeXError):
+    """Raised on malformed or missing engagement scope files."""
+
+
+class OutOfScopeError(DrakeXError):
+    """Raised when a target is rejected by the engagement scope file.
+
+    Distinct from :class:`ScopeViolationError`, which covers per-input
+    safety checks (loopback, link-local, etc). This one covers
+    operator-declared engagement scope.
+    """
+
+
+class ConfirmationDeniedError(DrakeXError):
+    """Raised when an active action is refused at the confirmation gate."""
+
+
+class PluginLoadError(DrakeXError):
+    """Raised when a plugin/integration cannot be loaded."""

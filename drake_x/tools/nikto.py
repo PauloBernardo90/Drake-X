@@ -26,6 +26,7 @@ class NiktoTool(BaseTool):
         target_types=(TARGET_DOMAIN, TARGET_URL),
         required=False,
         parallel_safe=False,
+        http_style=True,
     )
 
     def build_command(self, target: Target) -> list[str]:

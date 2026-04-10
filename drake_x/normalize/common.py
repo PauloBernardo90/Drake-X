@@ -14,6 +14,8 @@ from ..logging import get_logger
 from ..models.artifact import Artifact
 from ..models.tool_result import ToolResult, ToolResultStatus
 from .dns import normalize_dig
+from .ffuf import normalize_ffuf
+from .httpx import normalize_httpx
 from .nmap import normalize_nmap
 from .web import normalize_curl, normalize_nikto, normalize_sslscan, normalize_whatweb
 from .whois import normalize_whois
@@ -28,6 +30,8 @@ _REGISTRY: dict[str, Callable[[ToolResult], Artifact | None]] = {
     "nikto": normalize_nikto,
     "curl": normalize_curl,
     "sslscan": normalize_sslscan,
+    "httpx": normalize_httpx,
+    "ffuf": normalize_ffuf,
 }
 
 

@@ -94,7 +94,7 @@ def render_header(console: Console, *, version: str | None = None) -> None:
     body = (
         f"[brand.skull]☠[/brand.skull]  "
         f"[brand]DRAKE·X[/brand]{version_tag}\n"
-        f"[brand.sub]local · safe-by-default · authorized recon console[/brand.sub]"
+        f"[brand.sub]local-first · scope-enforced · evidence-driven[/brand.sub]"
     )
     console.print(
         Panel(

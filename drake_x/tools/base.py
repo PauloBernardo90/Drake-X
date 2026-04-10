@@ -41,6 +41,7 @@ class ToolMeta:
     target_types: tuple[str, ...]        # which target types it handles
     required: bool = False               # if True, missing => session warning
     parallel_safe: bool = True           # may run concurrently with peers
+    http_style: bool = False             # opts into the engine's HTTP rate limiter
 
 
 class BaseTool:

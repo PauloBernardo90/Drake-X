@@ -1,0 +1,19 @@
+# Example Drake-X workspace.toml.
+#
+# `drake init <name>` writes one of these for you. Edit it to point at the
+# local Ollama model you want to use, the default tool timeout, and the
+# module the CLI should pre-select for `drake recon run` invocations
+# without `--module`.
+
+name = "example-bug-bounty"
+created_at = "2026-04-10T00:00:00+00:00"
+operator = "alice"
+notes = "Example workspace shipped with Drake-X."
+
+[ai]
+ollama_url = "http://127.0.0.1:11434"
+ollama_model = "llama3.2:1b"
+
+[engine]
+default_timeout = 180
+default_module = "recon_passive"

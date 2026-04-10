@@ -1,83 +1,101 @@
 # Drake-X
 
-**Drake-X** is a CLI-based reconnaissance assistant for **authorized** security
-assessments. It accepts a single target (IPv4, IPv6, CIDR, domain, or URL),
-discovers which native Kali tools are installed on the host, runs a safe set of
-recon workflows against the target, normalizes the output into structured
-artifacts, persists everything to SQLite, and (optionally) hands the artifacts
-to a **local** Ollama model for careful triage. It then renders a Markdown
-report.
+Drake-X is a local-first offensive security framework for Kali Linux,
+featuring local AI assistance, strict scope enforcement, reproducible
+workspaces, human-in-the-loop operation, and evidence-driven reporting.
+
+Drake-X orchestrates locally installed reconnaissance tools, normalizes
+their output into structured artifacts, enforces operator-declared
+engagement scope, and optionally asks a local LLM for triage and
+classification. It produces auditable, evidence-linked reports that
+clearly separate observed facts from AI-generated inference.
+
+Drake-X is written in Python 3. It shells out to native Kali tools as
+subprocesses but contains no Kali-only Python dependencies.
 
 ## Authorized use only
 
-> Drake-X is intended for **authorized** security testing only. Only run it
-> against assets you own, or for which you have explicit, written permission to
-> assess. Unauthorized scanning may be illegal in your jurisdiction. By using
-> Drake-X you accept full responsibility for the targets you choose.
+> Drake-X is intended for **authorized** security testing only. Only run
+> it against assets you own, or for which you have explicit, written
+> permission to assess. Unauthorized scanning may be illegal in your
+> jurisdiction.
 
-Drake-X is **not an exploit framework**. It does not perform exploitation,
+Drake-X is not an exploit framework. It does not perform exploitation,
 brute forcing, credential attacks, payload generation, post-exploitation,
-persistence, lateral movement, phishing, or any kind of weaponization. The AI
-layer is constrained by prompt and by code to refuse exploit suggestions.
+persistence, lateral movement, phishing, or weaponization of any kind.
+The code and the AI prompts both enforce this boundary.
 
-## Features
+## Design Principles
 
-- Scope-aware target validation (rejects loopback, link-local, multicast,
-  reserved ranges, and absurdly broad CIDRs).
-- Profile-based recon orchestration: `passive`, `safe`, `web-basic`,
-  `network-basic`.
-- Adapters for the most common Kali recon tools: `nmap`, `dig`, `whois`,
-  `whatweb`, `nikto` (information-only mode), `curl`, `sslscan`.
-- Per-tool subprocess execution with timeouts; **no shell injection** anywhere
-  (every adapter builds an `argv` list and uses
-  `asyncio.create_subprocess_exec`).
-- Structured normalizers that turn raw tool output into stable JSON artifacts.
-- SQLite persistence for sessions, tool results, artifacts, and findings.
-- Optional local Ollama integration with a careful, defensive system prompt.
-  Drake-X never calls remote AI providers.
-- Markdown reports with explicit "analyst validation required" framing.
-- Graceful degradation when binaries are missing — missing tools are reported,
-  not silently skipped.
+- **Human-in-the-loop by design.** The operator declares scope, selects
+  modules, confirms active actions, and validates every finding. Drake-X
+  assists with triage and reporting — it never acts autonomously.
+- **Strict scope enforcement.** An engagement scope file must exist
+  before any tool runs. Out-of-scope targets are refused. Active
+  integrations require both `scope.allow_active=true` and explicit
+  operator confirmation.
+- **Evidence over assumptions.** Every finding carries a `source` (rule,
+  AI, parser, operator) and a `fact_or_inference` flag. Reports never
+  present AI-generated interpretation as observed fact.
+- **Local-first AI.** The optional LLM layer communicates only with a
+  local Ollama instance on the same host. There is no remote AI client
+  in the codebase. No telemetry. No cloud dependency.
+- **Reproducibility and auditability.** Each workspace is a
+  self-contained directory with config, scope, database, evidence, and
+  an append-only audit log. Copy the directory to reproduce every
+  report on another host.
 
-## Architecture overview
+## Capabilities
 
-```
-                    ┌────────────────┐
-        target ──▶  │  drake_x.scope │   validate / canonicalize
-                    └────────┬───────┘
-                             ▼
-                    ┌────────────────┐
-                    │   registry     │   discover installed binaries
-                    └────────┬───────┘
-                             ▼
-                    ┌────────────────┐
-                    │  orchestrator  │   pick tools, run safely, persist
-                    └────────┬───────┘
-                             ▼
-        ┌───────────────┬───────────────┬──────────────────┐
-        ▼               ▼               ▼                  ▼
-   tools (subprocess)  normalizers     session_store    AI analyzer (optional)
-                                       (SQLite)         (local Ollama)
-                             ▼
-                    ┌────────────────┐
-                    │ reports.markdown │
-                    └────────────────┘
-```
+**Workspace model.** `~/.drake-x/workspaces/<name>/` holds
+`workspace.toml`, `scope.yaml`, `drake.db` (SQLite), `runs/`, and
+`audit.log`.
 
-The CLI (`drake_x.cli`) wires these together. Every layer is exercised by tests
-in `tests/`.
+**Scope enforcement.** Operator-declared in-scope and out-of-scope
+assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope rules
+always win. Targets matching no in-scope rule are denied by default.
+
+**Modules.** `recon_passive`, `recon_active`, `web_inspect`,
+`tls_inspect`, `headers_audit`, `content_discovery`, `api_inventory`.
+
+**Integrations.** Built-in: nmap, dig, whois, whatweb, nikto, curl,
+sslscan. Real optional: httpx, ffuf. Stubs for future work: subfinder,
+amass, naabu, dnsx, nuclei, feroxbuster, eyewitness, testssl.
+
+**Security headers audit.** Rule-based findings for missing HSTS, CSP,
+X-Frame-Options, X-Content-Type-Options, Referrer-Policy, cookie flags,
+and server version leaks. Each tagged with CWE and OWASP references.
+
+**Rate limiter.** HTTP-style integrations respect per-host pacing and a
+global concurrency budget, both configurable in the scope file.
+
+**Findings model.** CWE / OWASP / MITRE ATT&CK references, evidence
+backrefs, fact vs inference flag, remediation placeholders, operator tags.
+
+**Local AI assistance.** File-based prompts and task classes:
+`summarize`, `classify`, `next_steps`, `observations`, `report_draft`,
+`dedupe`. All tasks run against stored artifacts — they never invoke
+tools.
+
+**Reporting.** Five output formats: technical Markdown, executive
+Markdown, JSON, scan manifest, evidence index. Session-to-session diff
+for tracking attack-surface changes over time.
+
+**API inventory.** Parses operator-supplied OpenAPI/Swagger specs into
+structured endpoint inventories without making network calls.
+
+**Auditability.** Every plan, run, denial, confirmation, and completion
+event is appended as a JSON line to `<workspace>/audit.log`. The
+engagement scope is snapshotted into the database at the start of each
+session.
 
 ## Installation (Kali Linux)
 
 ```bash
-# 1. Install Python 3.12+ and a few build deps if missing.
 sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
+sudo apt install -y python3 python3-venv python3-pip \
+                    nmap dnsutils whois whatweb nikto curl sslscan
 
-# 2. Recommended: native recon tools.
-sudo apt install -y nmap dnsutils whois whatweb nikto curl sslscan
-
-# 3. Clone and install Drake-X.
 git clone https://github.com/PauloBernardo90/Drake-X.git
 cd Drake-X
 python3 -m venv .venv
@@ -85,167 +103,109 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-After install, you should have a `drake-x` entrypoint on your `PATH`:
+Verify:
 
 ```bash
-drake-x --help
-drake-x tools list
+drake --help
+drake tools
 ```
 
-### Expected native tools
+See [`docs/kali-setup.md`](docs/kali-setup.md) for the full walkthrough.
 
-Drake-X works fine if some of these are missing — it will just report them as
-skipped — but the more you have, the more useful the output:
+## Local LLM (optional)
 
-| Package (Debian/Kali) | Binary    | Used by profiles                       |
-|-----------------------|-----------|----------------------------------------|
-| `nmap`                | `nmap`    | `safe`, `network-basic`                |
-| `dnsutils`            | `dig`     | all profiles                           |
-| `whois`               | `whois`   | `passive`, `safe`, `web-basic`         |
-| `whatweb`             | `whatweb` | `safe`, `web-basic`                    |
-| `nikto`               | `nikto`   | `web-basic` only (information-only)    |
-| `curl`                | `curl`    | `passive`, `safe`, `web-basic`         |
-| `sslscan`             | `sslscan` | `safe`, `web-basic`                    |
-
-## Optional: Ollama setup
-
-Drake-X never sends data to a remote provider. If you want AI triage you must
-run [Ollama](https://ollama.com/) locally.
+Drake-X never sends data to a remote provider. For local AI assistance,
+run [Ollama](https://ollama.com/) on the same host:
 
 ```bash
-# Install Ollama (see https://ollama.com for the latest instructions).
 curl -fsSL https://ollama.com/install.sh | sh
-
-# Pull a small instruction-tuned model. Drake-X defaults to llama3.2:3b.
-ollama pull llama3.2:3b
-
-# Make sure the daemon is running on http://localhost:11434.
+ollama pull llama3.2:1b
 ollama serve &
+drake ai status -w my-engagement
 ```
 
-Drake-X will automatically detect whether Ollama is reachable. If it's not, the
-scan still runs and the AI section is simply omitted.
+See [`docs/llm-setup.md`](docs/llm-setup.md) for model selection and
+prompt customization.
 
-## Profiles
-
-| Profile         | Intent                                                              | Typical tools                                |
-|-----------------|---------------------------------------------------------------------|----------------------------------------------|
-| `passive`       | DNS / WHOIS / single HTTP HEAD only — no active scanning            | `dig`, `whois`, `curl`                       |
-| `safe`          | Conservative active recon, suitable for most engagements (default)  | `dig`, `whois`, `curl`, `whatweb`, `sslscan`, `nmap` |
-| `web-basic`     | Web fingerprinting oriented                                         | `dig`, `whois`, `curl`, `whatweb`, `sslscan`, `nikto` (info-only) |
-| `network-basic` | Service discovery oriented                                          | `dig`, `nmap`                                |
-
-You can pick a profile with `--profile`:
+## Quick tour
 
 ```bash
-drake-x scan example.com --profile passive
-drake-x scan https://example.com/login --profile web-basic
-drake-x scan 192.0.2.0/24 --profile network-basic
+# Initialize a workspace
+drake init my-engagement
+
+# Define the engagement scope
+$EDITOR ~/.drake-x/workspaces/my-engagement/scope.yaml
+drake scope validate -w my-engagement
+drake scope check example.com -w my-engagement
+
+# Plan and execute passive recon
+drake recon plan example.com -m recon_passive -w my-engagement
+drake recon run  example.com -m recon_passive -w my-engagement
+
+# Execute active recon (requires scope.allow_active=true)
+drake recon run example.com -m recon_active -w my-engagement --yes
+
+# Ingest an OpenAPI spec
+drake api ingest /path/to/openapi.json -w my-engagement
+
+# Generate reports
+drake report generate <session-id> -f md        -w my-engagement
+drake report generate <session-id> -f json      -w my-engagement
+drake report generate <session-id> -f executive -w my-engagement
+drake report generate <session-id> -f manifest  -w my-engagement
+
+# Compare two sessions
+drake report diff <session-a> <session-b> -w my-engagement
+
+# Run AI tasks (requires Ollama)
+drake ai summarize    <session-id> -w my-engagement
+drake ai classify     <session-id> -w my-engagement
+drake ai dedupe       <session-id> -w my-engagement --apply
+
+# Inspect findings
+drake findings list -w my-engagement
+drake findings show <finding-id> -w my-engagement
 ```
 
-## Basic usage
+See [`docs/usage.md`](docs/usage.md) for the full walkthrough.
 
-```bash
-# Recon a domain with the default safe profile.
-drake-x scan example.com
+## Safety
 
-# Recon a URL, write a JSON summary to stdout, generate the report file.
-drake-x scan https://example.com/login --json
+Drake-X enforces every action through four layers:
 
-# Use a different local model via Ollama.
-drake-x scan example.com --model llama3.2:1b
+1. **Target validation** — refuses loopback, link-local, multicast,
+   reserved ranges, and excessively broad CIDRs regardless of scope.
+2. **Engagement scope** — out-of-scope rules win; unmatched targets are
+   denied by default.
+3. **Action policy** — every integration is classified as passive, light,
+   active, or intrusive. Active and intrusive integrations require
+   `scope.allow_active=true`.
+4. **Confirmation gate** — active and intrusive integrations prompt the
+   operator for confirmation. `--dry-run` plans without executing.
 
-# Skip AI analysis even if Ollama is reachable.
-drake-x scan example.com --no-ai
-
-# Use a custom database / output directory.
-drake-x scan example.com --db-path /tmp/drake.db --output-dir /tmp/drake_runs
-
-# List supported tools and which ones are installed.
-drake-x tools list
-
-# Re-render a Markdown report from a previously stored session.
-drake-x report <session_id> -o report.md
-```
-
-## Output
-
-Each scan produces:
-
-1. A row in the SQLite database (`drake_x.db` by default) covering the session,
-   each tool result, every parsed artifact, and any AI findings.
-2. A directory under `drake_x_runs/<session_id>/` with:
-   - `report.md` — the Markdown report
-   - `artifacts.json` — every parsed artifact, for downstream processing
-
-The Markdown report includes:
-
-- session metadata
-- target summary
-- tools executed and missing tools (and warnings)
-- discovered services (nmap)
-- DNS records (dig)
-- WHOIS summary
-- web stack observations (whatweb, curl)
-- TLS observations (sslscan)
-- nikto information-only headlines
-- AI executive summary + findings (if Ollama was used)
-- a closing reminder that all output requires analyst validation
+Every event is recorded in the append-only audit log. See
+[`docs/safety.md`](docs/safety.md) for the complete safety model.
 
 ## Development
 
 ```bash
-# In your venv:
 pip install -e ".[dev]"
-
-# Run tests (no real tools required — subprocess and shutil.which are mocked).
 pytest -q
-
-# Lint / format.
 ruff check drake_x tests
 ruff format drake_x tests
 ```
 
-The codebase is small and intentionally avoids clever metaprogramming. Adding a
-new tool means writing one adapter under `drake_x/tools/` (subclass `BaseTool`,
-provide `meta` and `build_command`), and one normalizer under
-`drake_x/normalize/`.
+See [`docs/architecture.md`](docs/architecture.md) for the package
+layout, engine lifecycle, storage schema, and extension guide.
 
-## Known limitations
+## Non-goals
 
-- Drake-X does not maintain its own scope file — scope checks are baked in
-  (loopback / link-local / huge CIDRs are refused) but per-engagement allow
-  lists are out of scope for v1.
-- Tool output is parsed best-effort. Where a parser cannot make sense of the
-  output, the artifact is still produced but with `confidence = 0.0` and an
-  explanatory note.
-- The AI layer is informational. It cannot replace a human analyst.
-- IPv6 support is present but lightly tested in the v1 tool adapters.
-- We do not (yet) attempt subdomain enumeration, certificate transparency
-  lookups, or passive DNS aggregation.
+Drake-X does not and will not implement:
 
-## Roadmap (v2 ideas)
-
-- Engagement-scoped allow lists (refuse anything outside an explicit scope file).
-- Optional, opt-in subdomain enumeration via passive sources only.
-- Concurrency tuning per profile.
-- Pluggable normalizers via Python entry points.
-- HTML report rendering alongside Markdown.
-- Richer findings model with cross-tool correlation.
-- A "watch" mode that diffs successive scans of the same target.
-
-## Out of scope (intentionally)
-
-Drake-X **does not** and **will not** implement any of the following:
-
-- Exploit execution, Metasploit integration
+- Exploit execution or Metasploit integration
 - Brute forcing or credential attacks
-- Default-on directory fuzzing
-- SQL injection / XSS / SSRF / CSRF / RCE testing
-- Lateral movement, persistence, privilege escalation
-- Phishing, malware simulation
-- Autonomous "agent loops" that can run arbitrary commands
-- Telemetry or any network call to a remote AI provider
-
-If you need any of those for an engagement, use a purpose-built tool with the
-appropriate authorization in place.
+- SQL injection, XSS, SSRF, CSRF, or RCE testing
+- Lateral movement, persistence, or privilege escalation
+- Phishing or malware simulation
+- Autonomous agent loops that execute arbitrary commands
+- Telemetry or network calls to remote AI providers
