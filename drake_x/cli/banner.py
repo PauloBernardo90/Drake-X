@@ -35,9 +35,10 @@ from ..logging import get_logger
 log = get_logger("banner")
 
 #: Minimum terminal width (columns) required to render the animated
-#: pirate-skull banner without wrapping. Below this threshold we fall
-#: back to the compact panel.
-BANNER_MIN_WIDTH: int = 200
+#: pirate-skull banner without wrapping. The shipped art is normalized
+#: before rendering, so we only require enough room for the trimmed and
+#: centered version rather than the raw file width.
+BANNER_MIN_WIDTH: int = 176
 
 #: Delay per rendered banner line. Kept intentionally small so the
 #: startup still feels fast even with the larger identity art.
@@ -84,19 +85,36 @@ def _render_reveal(console: Console, banner_text: str) -> None:
     This keeps the first impression more deliberate than a static wall of
     ASCII while staying fast enough for normal CLI use.
     """
-    lines = [line.rstrip() for line in banner_text.splitlines() if line.strip()]
+    lines = _normalize_banner_lines(banner_text)
     if not lines:
         render_header(console, version=__version__)
         return
 
-    # Use the same accent family as the rest of the CLI, with slightly
-    # dimmer supporting lines so the central wordmark carries the visual
-    # weight.
-    for idx, line in enumerate(lines):
+    # Keep the identity art centered relative to the terminal and align
+    # the footer line with the same visual block.
+    for idx, raw_line in enumerate(lines):
         style = "bright_cyan" if 0 < idx < len(lines) - 2 else "cyan"
+        line = raw_line.center(console.width)
         console.print(f"[{style}]{line}[/{style}]", highlight=False)
         time.sleep(_REVEAL_DELAY_S)
 
+    footer = f"v{__version__}  ·  authorized use only  ·  operator-driven"
     console.print(
-        f"[muted]  v{__version__}  ·  authorized use only  ·  operator-driven[/muted]"
+        f"[muted]{footer.center(console.width)}[/muted]"
     )
+
+
+def _normalize_banner_lines(banner_text: str) -> list[str]:
+    """Trim common indentation from the shipped ASCII art.
+
+    The source file keeps leading spaces for readability. Removing only
+    the indentation shared by every non-empty line preserves the shape
+    while allowing centered rendering on a wider range of terminals.
+    """
+    raw_lines = [line.rstrip() for line in banner_text.splitlines() if line.strip()]
+    if not raw_lines:
+        return []
+
+    leading = [len(line) - len(line.lstrip()) for line in raw_lines]
+    common_indent = min(leading)
+    return [line[common_indent:] for line in raw_lines]
