@@ -82,7 +82,7 @@ drake --help
 Confirm the install:
 
 ```bash
-drake tools             # lists every integration and which binary is installed
+drake tools             # lists integrations plus APK/dynamic/reporting toolchains
 pytest -q               # all tests should pass
 ```
 

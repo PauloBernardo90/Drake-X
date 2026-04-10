@@ -228,6 +228,10 @@ drake tools             # uses the default workspace if none is given
 drake tools -w acme-bug-bounty
 ```
 
-You'll see every built-in adapter, every optional stub, and any
-third-party plugins discovered through the `drake_x.integrations`
-entry-point group.
+You'll see:
+- built-in recon adapters
+- optional real/stub integrations
+- third-party plugins discovered through the `drake_x.integrations`
+  entry-point group
+- supporting toolchains used by APK, dynamic validation, intelligence
+  enrichment, and reporting workflows
