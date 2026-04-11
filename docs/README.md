@@ -13,6 +13,8 @@ Architecture and safety:
 - [`safety.md`](safety.md) — scope enforcement and safety model
 - [`operator-control.md`](operator-control.md) — operator workflows and custom mission templates
 - [`ux-layer.md`](ux-layer.md) — CLI UX layer and workflow ergonomics
+- [`doctrine/v1-engineering-directive.md`](doctrine/v1-engineering-directive.md) — v1.0 engineering doctrine for bounded exploit-awareness
+- [`adr/0005-exploit-awareness-without-exploit-tooling.md`](adr/0005-exploit-awareness-without-exploit-tooling.md) — exploit-awareness boundary for native malware analysis evolution
 
 Analysis and evidence:
 
