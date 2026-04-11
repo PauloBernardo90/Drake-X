@@ -15,6 +15,7 @@ Architecture and safety:
 - [`ux-layer.md`](ux-layer.md) — CLI UX layer and workflow ergonomics
 - [`doctrine/v1-engineering-directive.md`](doctrine/v1-engineering-directive.md) — v1.0 engineering doctrine for bounded exploit-awareness
 - [`doctrine/v0.8-native-foundations-checklist.md`](doctrine/v0.8-native-foundations-checklist.md) — operational checklist for implementing PE/native foundations
+- [`doctrine/console-persistent-analysis-requirements.md`](doctrine/console-persistent-analysis-requirements.md) — requirements for a persistent investigation console
 - [`adr/0005-exploit-awareness-without-exploit-tooling.md`](adr/0005-exploit-awareness-without-exploit-tooling.md) — exploit-awareness boundary for native malware analysis evolution
 
 Analysis and evidence:
