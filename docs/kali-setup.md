@@ -5,15 +5,17 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 
 Drake-X is designed to run natively on Kali Linux. The framework itself
 is pure Python 3, but it shells out to native Kali tools as subprocesses,
-so you'll get the most value from it on a Kali host where those tools
-already live.
+so you'll get the most value from it on a Kali host where malware-
+analysis, reverse-engineering, and supporting collection tools already
+live.
 
 ## Prerequisites
 
 - Kali Linux 2024.x or newer (any rolling release works)
 - Python 3.12 or newer
 - About 200 MB of disk for the framework + dependencies
-- An additional 1–4 GB if you plan to run a local LLM via Ollama
+- Additional disk for local models, extracted samples, APK reports, and
+  reverse-engineering artifacts
 
 ## 1. Install Python and the system tools
 
@@ -21,7 +23,8 @@ already live.
 sudo apt update
 sudo apt install -y \
     python3 python3-venv python3-pip \
-    nmap dnsutils whois whatweb nikto curl sslscan
+    nmap dnsutils whois whatweb nikto curl sslscan \
+    apktool jadx unzip yara radare2 ghidra adb
 ```
 
 | Package (Debian/Kali) | Binary    | Used by                                    |
@@ -37,7 +40,20 @@ sudo apt install -y \
 Drake-X gracefully degrades when tools are missing — they show up under
 "missing" in the plan and the run continues without them.
 
-## 2. Optional: install integrations Drake-X has stubs for
+For v0.7, the most important optional toolchains after the base install
+are:
+
+- `apktool`, `jadx`, `unzip`, `yara`, `radare2` for APK/static analysis
+- `ghidra` for deeper native analysis
+- `adb` and `frida` for analyst-assisted dynamic validation
+
+Install Frida if you want to use runtime observation workflows:
+
+```bash
+python3 -m pip install frida-tools
+```
+
+## 2. Optional: install supporting collection integrations
 
 Drake-X ships stubs for these integrations under
 `drake_x/integrations/optional/`. The stubs declare their argv layout
@@ -102,11 +118,11 @@ See [`llm-setup.md`](llm-setup.md).
 
 ## Running Drake-X under a non-root user
 
-Drake-X never asks for root privileges. The integrations it shells out
-to may need them (`nmap` for SYN scans, etc.), but the default `nmap`
-adapter uses `-Pn -sV` which works without root. Run Drake-X as a normal
-user; only escalate the specific tools that need it, ideally via `sudo`
-on a per-command allowlist.
+Drake-X never asks for root privileges. Some supporting collection
+integrations may need them (`nmap` for SYN scans, etc.), while some
+dynamic-analysis setups may require device/emulator-specific privileges.
+Run Drake-X as a normal user; only escalate the specific tools that need
+it, ideally via `sudo` on a per-command allowlist.
 
 ## Persisted state on disk
 

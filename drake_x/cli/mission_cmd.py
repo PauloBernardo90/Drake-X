@@ -7,10 +7,10 @@ individual commands use.
 
 Supported mission types:
 
-- ``web``   — passive recon → active recon → web inspect → headers audit → report
-- ``recon`` — passive recon → active recon → report
-- ``apk``   — APK static analysis → report
-- ``full``  — passive → active → web → headers → content discovery → report
+- ``apk``   — primary malware-analysis workflow → report
+- ``web``   — supporting passive recon → active recon → web inspect → headers audit → report
+- ``recon`` — supporting passive recon → active recon → report
+- ``full``  — supporting passive → active → web → headers → content discovery → report
 """
 
 from __future__ import annotations
@@ -39,7 +39,10 @@ from ..safety.confirm import ConfirmGate, ConfirmMode
 from ..scope import parse_target
 from . import _shared
 
-app = typer.Typer(no_args_is_help=True, help="High-level guided mission workflows.")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="High-level guided investigation workflows. APK is the primary malware-analysis path; recon/web remain supporting flows.",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -84,8 +87,8 @@ _MISSIONS: dict[str, list[MissionStep]] = {
 
 @app.command("run")
 def run_mission(
-    mission_type: str = typer.Argument(..., help="Mission type: web, recon, apk, full."),
-    target: str = typer.Argument(..., help="Target domain/URL/IP or APK file path."),
+    mission_type: str = typer.Argument(..., help="Mission type: apk, web, recon, full."),
+    target: str = typer.Argument(..., help="APK file path or supporting collection target (domain/URL/IP)."),
     workspace: str = typer.Option(None, "--workspace", "-w", help="Workspace name or path."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Pre-approve confirmation gates."),
     dry_run: bool = typer.Option(False, "--dry-run", help="Plan only; do not execute."),
@@ -95,7 +98,7 @@ def run_mission(
     output_dir: Path = typer.Option(None, "--output-dir", "-o", help="Override output directory."),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output."),
 ) -> None:
-    """Execute a multi-step mission workflow against a target."""
+    """Execute a multi-step investigation workflow against a sample or target."""
     console = make_console()
 
     # --- APK missions delegate directly to the apk analyze command ---

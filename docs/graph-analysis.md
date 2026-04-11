@@ -5,10 +5,11 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 
 ## Overview
 
-Drake-X v0.5 introduces graph-aware intelligence: the ability for
-analysts and AI tasks to explore structured relationships between
-findings, artifacts, indicators, and assessments through the Evidence
-Graph.
+Drake-X v0.7 treats the Evidence Graph as the central abstraction for
+evidence-driven malware analysis and threat investigation. Analysts and
+AI tasks use it to explore structured relationships between findings,
+artifacts, indicators, protections, enrichments, and assessments across
+analysis domains.
 
 ## `drake graph show`
 
@@ -42,7 +43,8 @@ flat evidence list. This provides the model with:
 
 - node-to-node relationships (which finding derived from which artifact)
 - supporting evidence chains (which permission supports which behavior)
-- cross-domain links (when APK and web indicators are in the same graph)
+- cross-domain links (when APK, native, IoC, and supporting collection
+  indicators are in the same graph)
 
 The graph context is:
 - **Bounded** — limited by max_nodes, max_edges, max_chars
@@ -52,21 +54,23 @@ The graph context is:
 
 ## How Graphs Are Built
 
-### Web/Recon Sessions
+### Supporting Collection Sessions
 
-The engine automatically builds an evidence graph after each recon run:
+The engine automatically builds an evidence graph after each supporting
+collection run:
 - Root node: the session target
 - Artifact nodes: one per tool output (curl, nmap, dig, etc.)
 - Finding nodes: one per finding (HSTS missing, CSP missing, etc.)
 - Edges: `derived_from` (artifact→target), `supports` (artifact→finding),
   `related_to` (finding→target), `duplicate_of` (from dedupe tags)
 
-### APK Analysis
+### APK / Malware Analysis
 
 `drake apk analyze` builds a richer graph:
 - Root: the APK sample
 - Permissions, behaviors, indicators, obfuscation traits, protections,
-  campaigns as separate node kinds
+  campaigns, external enrichments, and dynamic-validation targets as
+  separate node kinds
 - Cross-category `supports` edges linking permissions to exfiltration
   findings, network IOCs to communication behaviors, behaviors to campaigns
 

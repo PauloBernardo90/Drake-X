@@ -40,11 +40,12 @@ app = typer.Typer(
     rich_markup_mode="rich",
     help=(
         f"[bold cyan]{APP_DISPLAY_NAME} v{__version__}[/bold cyan] — "
-        "AI-powered authorized offensive security framework.\n\n"
+        "AI-assisted evidence-driven malware analysis platform.\n\n"
         f"[bold yellow]{AUTHORIZED_USE_NOTICE}[/bold yellow]\n\n"
-        "Drake-X is an operator-driven recon, triage and reporting "
-        "framework. The local LLM assists; it never replaces a human "
-        "analyst, and the framework refuses to perform exploitation."
+        "Drake-X is an operator-driven malware analysis, threat "
+        "investigation, and reporting platform. The local LLM assists; "
+        "it never replaces a human analyst, and the framework refuses "
+        "to perform exploitation."
     ),
 )
 

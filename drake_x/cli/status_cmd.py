@@ -2,7 +2,7 @@
 
 A read-only command that summarizes the current workspace state without
 mutating any data. Designed to be fast, graceful on missing data, and
-useful as the first thing an operator runs when resuming work.
+useful as the first thing an analyst runs when resuming work.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from . import _shared
 app = typer.Typer(
     no_args_is_help=False,
     invoke_without_command=True,
-    help="Show workspace status and health at a glance.",
+    help="Show workspace health, evidence coverage, and investigation readiness at a glance.",
 )
 
 _KEY_TOOLS = ["nmap", "dig", "whois", "whatweb", "nikto", "curl", "sslscan",

@@ -1,6 +1,6 @@
 """``drake flow`` — interactive menu-based navigation.
 
-A lightweight terminal menu that routes the operator to the right
+A lightweight terminal menu that routes the analyst to the right
 Drake-X command without memorizing subcommand names. No curses, no
 heavy UI — just numbered choices and stdin.
 
@@ -19,21 +19,21 @@ from ..cli_theme import info, make_console, success, warn
 app = typer.Typer(
     no_args_is_help=False,
     invoke_without_command=True,
-    help="Interactive menu-based navigation for Drake-X.",
+    help="Interactive menu-based navigation for Drake-X investigation workflows.",
 )
 
 _MAIN_MENU = [
     ("Workspace Setup", "drake init <name>"),
-    ("Scope Management", "drake scope validate / show / check"),
-    ("Reconnaissance", "drake recon run <target> -m <module>"),
-    ("Web Analysis", "drake web inspect <url>"),
-    ("APK Analysis", "drake apk analyze <file.apk>"),
-    ("Mission Workflow", "drake mission run <type> <target>"),
-    ("AI Assist", "drake assist start <domain> <target>"),
-    ("Findings", "drake findings list"),
+    ("APK / Malware Analysis", "drake apk analyze <file.apk>"),
     ("Evidence Graph", "drake graph show <session-id>"),
     ("AI Tasks", "drake ai summarize / classify / dedupe"),
     ("Reports", "drake report generate <session-id>"),
+    ("Scope Management", "drake scope validate / show / check"),
+    ("Supporting Reconnaissance", "drake recon run <target> -m <module>"),
+    ("Supporting Web Analysis", "drake web inspect <url>"),
+    ("Mission Workflow", "drake mission run <type> <target>"),
+    ("AI Assist", "drake assist start <domain> <target>"),
+    ("Findings", "drake findings list"),
     ("Tools", "drake tools"),
 ]
 

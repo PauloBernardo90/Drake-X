@@ -3,10 +3,12 @@
 See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`operator-control.md`](operator-control.md), [`usage.md`](usage.md)
 
-Drake-X v0.5.1 introduces a usability layer that simplifies operator
-interaction without removing control, hiding steps, or weakening the
+Drake-X v0.7 treats the UX layer as investigation guidance, not just
+command convenience. The goal is to help the operator move through
+evidence collection, malware analysis, intelligence correlation, and
+reporting without removing control, hiding steps, or weakening the
 safety model. Every UX command delegates to existing modules, engines,
-and scope enforcement — it adds guidance, not automation.
+and guardrails — it adds guidance, not automation.
 
 ## Design Principles
 
@@ -15,7 +17,8 @@ and scope enforcement — it adds guidance, not automation.
 - **Human-in-the-loop.** Every active or intrusive step requires
   confirmation. The operator can exit at any time.
 - **Evidence-driven.** Assist Mode ties every suggestion to workspace
-  evidence. It does not invent actions.
+  evidence. It does not invent actions or silently escalate from static
+  evidence to dynamic execution.
 - **No new logic.** Mission, Assist, and Flow call the same engine,
   modules, and scope enforcer that individual commands use.
 
@@ -34,10 +37,10 @@ drake mission run full example.com -w my-engagement --no-active --dry-run
 
 | Type | Steps |
 |------|-------|
-| `recon` | passive recon → active recon |
-| `web` | passive → active → web inspect → headers audit |
-| `full` | passive → active → web → headers → content discovery |
-| `apk` | delegates to `drake apk analyze` |
+| `recon` | supporting passive recon → active recon |
+| `web` | supporting passive → active → web inspect → headers audit |
+| `full` | supporting passive → active → web → headers → content discovery |
+| `apk` | primary malware-analysis path via `drake apk analyze` |
 
 ### Behavior
 
@@ -68,8 +71,8 @@ drake mission run full example.com -w my-engagement --no-active --dry-run
 
 ## Assist Mode
 
-AI-guided operator assistant that suggests next steps based on
-workspace evidence.
+AI-guided operator assistant that suggests next investigative steps
+based on workspace evidence.
 
 ```bash
 drake assist start web example.com -w my-engagement
@@ -84,6 +87,11 @@ drake assist start apk com.evil.dropper -w my-engagement
 4. Wait for operator confirmation
 5. Execute via existing engine (if approved)
 6. Repeat
+
+For v0.7, the intended use is malware-analysis triage and evidence
+correlation first. Recon/web suggestions remain valid, but they should
+be framed as supporting collection steps rather than the product's
+default identity.
 
 ### UX output
 

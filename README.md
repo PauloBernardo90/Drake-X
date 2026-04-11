@@ -1,39 +1,55 @@
+<p align="center">
+  <img src="docs/assets/drake-x-logo.jpeg" alt="Drake-X logo" width="520">
+</p>
+
 # Drake-X
 
-Drake-X is a local-first offensive security framework for Kali Linux,
-featuring local AI assistance, strict scope enforcement, reproducible
-workspaces, human-in-the-loop operation, and evidence-driven reporting.
+Drake-X is a local-first, evidence-driven malware analysis and threat
+investigation platform for Kali Linux, with local AI assistance,
+reproducible workspaces, human-in-the-loop operation, and auditable
+reporting.
 
-Drake-X orchestrates locally installed reconnaissance tools, normalizes
-their output into structured artifacts, enforces operator-declared
-engagement scope, and optionally asks a local LLM for triage and
-classification. It produces auditable, evidence-linked reports that
-clearly separate observed facts from AI-generated inference.
+Drake-X structures evidence across APK/mobile malware analysis, native
+binary inspection, IoC enrichment, analyst-assisted dynamic validation,
+and supporting collection workflows such as recon and web inspection. It
+normalizes tool output into linked artifacts, findings, indicators, and
+hypotheses, then produces auditable reports that clearly separate
+observed facts, external intelligence, analytic assessment, and AI-backed
+inference.
 
 Drake-X is written in Python 3. It shells out to native Kali tools as
 subprocesses but contains no Kali-only Python dependencies.
 
 ## Authorized use only
 
-> Drake-X is intended for **authorized** security testing only. Only run
-> it against assets you own, or for which you have explicit, written
-> permission to assess. Unauthorized scanning may be illegal in your
-> jurisdiction.
+> Drake-X is intended for **authorized** defensive investigation,
+> malware research, and security assessment only. Only run it against
+> assets or samples you are permitted to analyze. Unauthorized scanning
+> or unauthorized sample handling may be illegal in your jurisdiction.
 
 Drake-X is not an exploit framework. It does not perform exploitation,
 brute forcing, credential attacks, payload generation, post-exploitation,
 persistence, lateral movement, phishing, or weaponization of any kind.
 The code and the AI prompts both enforce this boundary.
 
+## Toward v0.7
+
+Drake-X v0.7 moves the project toward **evidence-driven AI-assisted
+malware analysis at scale**. The center of gravity is now malware
+analysis, native inspection, intelligence correlation, and
+analyst-assisted validation. Recon and web collection remain in the
+platform, but as supporting evidence-gathering domains rather than the
+primary product identity.
+
 ## Design Principles
 
 - **Human-in-the-loop by design.** The operator declares scope, selects
   modules, confirms active actions, and validates every finding. Drake-X
   assists with triage and reporting — it never acts autonomously.
-- **Strict scope enforcement.** An engagement scope file must exist
-  before any tool runs. Out-of-scope targets are refused. Active
-  integrations require both `scope.allow_active=true` and explicit
-  operator confirmation.
+- **Strict operator control.** Network-facing collection workflows
+  require engagement scope and confirmation. Sample analysis workflows
+  remain local-first and evidence-preserving. Out-of-scope and
+  unauthorized target interaction is refused by default.
 - **Evidence over assumptions.** Every finding carries a `source` (rule,
   AI, parser, operator) and a `fact_or_inference` flag. Reports never
   present AI-generated interpretation as observed fact.
@@ -51,24 +67,35 @@ The code and the AI prompts both enforce this boundary.
 `workspace.toml`, `scope.yaml`, `drake.db` (SQLite), `runs/`, and
 `audit.log`.
 
-**Scope enforcement.** Operator-declared in-scope and out-of-scope
-assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope rules
-always win. Targets matching no in-scope rule are denied by default.
+**Evidence model.** Structured findings, indicators, protections,
+campaign-similarity assessments, external intelligence enrichments, and
+dynamic-validation hypotheses all converge into a shared evidence graph.
 
-**Modules.** `recon_passive`, `recon_active`, `web_inspect`,
-`tls_inspect`, `headers_audit`, `content_discovery`, `api_inventory`.
+**Malware analysis workflows.** APK analysis, native binary inspection,
+VirusTotal correlation, Frida observation templates, Ghidra-backed
+deeper analysis, and evidence-linked reporting for analyst review.
+
+**Scope enforcement.** Operator-declared in-scope and out-of-scope
+network assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope
+rules always win. Targets matching no in-scope rule are denied by
+default.
+
+**Supporting collection modules.** `recon_passive`, `recon_active`,
+`web_inspect`, `tls_inspect`, `headers_audit`, `content_discovery`,
+`api_inventory`.
 
 **Integrations.** Built-in: nmap, dig, whois, whatweb, nikto, curl,
 sslscan. Real optional: httpx, ffuf. Stubs for future work: subfinder,
 amass, naabu, dnsx, nuclei, feroxbuster, eyewitness, testssl.
 
 **Mission workflows.** `drake mission run web/recon/apk/full <target>`
-orchestrates multi-step analysis with progress output, scope enforcement,
-and confirmation gating. See [`docs/ux-layer.md`](docs/ux-layer.md).
+orchestrates multi-step evidence collection and analysis with progress
+output, scope enforcement, and confirmation gating. See
+[`docs/ux-layer.md`](docs/ux-layer.md).
 
 **AI Assist.** `drake assist start <domain> <target>` provides a guided
-AI loop that suggests evidence-backed next steps, explains reasoning,
-and executes only with operator confirmation.
+AI loop that suggests evidence-backed next investigative steps,
+explains reasoning, and executes only with operator confirmation.
 
 **Flow navigation.** `drake flow` provides interactive menu-based
 navigation for operators who prefer not to memorize subcommand names.
@@ -101,16 +128,20 @@ backrefs, fact vs inference flag, remediation placeholders, operator tags.
 tools.
 
 **Reporting.** Five output formats: technical Markdown, executive
-Markdown, JSON, scan manifest, evidence index. Session-to-session diff
-for tracking attack-surface changes over time.
+Markdown, JSON, scan manifest, evidence index. Report sections preserve
+fact vs inference vs external intel vs dynamic hypothesis. Session-to-
+session diff supports trend analysis over time.
 
 **API inventory.** Parses operator-supplied OpenAPI/Swagger specs into
-structured endpoint inventories without making network calls.
+structured endpoint inventories without making network calls. Useful as
+supporting context for threat investigation.
 
-**APK static analysis.** Dedicated agent for Android malware analysis:
-manifest parsing, permission auditing, behavior detection, obfuscation
-assessment, protection detection, campaign similarity, and a structured
-11-section technical report. See [`docs/apk-analysis.md`](docs/apk-analysis.md).
+**APK malware analysis.** Dedicated pipeline for Android malware
+analysis: manifest parsing, permission auditing, behavior detection,
+obfuscation assessment, protection detection, campaign similarity,
+VirusTotal enrichment, Frida dynamic-validation targets, optional Ghidra
+deeper analysis, and a structured technical report. See
+[`docs/apk-analysis.md`](docs/apk-analysis.md).
 
 **Evidence Graph.** Structured relationships between findings, artifacts,
 indicators, and assessments. Nodes carry domain (web, apk), kind, and
@@ -173,7 +204,7 @@ $EDITOR ~/.drake-x/workspaces/my-engagement/scope.yaml
 drake scope validate -w my-engagement
 drake scope check example.com -w my-engagement
 
-# Plan and execute passive recon
+# Plan and execute supporting passive recon
 drake recon plan example.com -m recon_passive -w my-engagement
 drake recon run  example.com -m recon_passive -w my-engagement
 
@@ -183,8 +214,8 @@ drake recon run example.com -m recon_active -w my-engagement --yes
 # Ingest an OpenAPI spec
 drake api ingest /path/to/openapi.json -w my-engagement
 
-# Static analysis of an Android APK
-drake apk analyze sample.apk -o ./apk-output
+# Malware analysis of an Android APK
+drake apk analyze sample.apk -o ./apk-output --vt --ghidra
 
 # Generate reports
 drake report generate <session-id> -f md        -w my-engagement

@@ -4,26 +4,29 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`safety.md`](safety.md), [`operator-control.md`](operator-control.md)
 
 This document describes how Drake-X is structured, how its components
-interact, and how the design principles are enforced in code. It is the
-reference for contributors and the source of truth when other documents
-disagree.
+interact, and how the design principles are enforced in code. For v0.7,
+the project should be read first as an evidence-driven malware analysis
+and threat investigation platform. Recon, web, and API collection
+remain in the system, but as supporting evidence-gathering domains
+alongside the core malware-analysis workflows.
 
 ## Design Principles
 
 - **Human-in-the-loop by design.** The operator declares scope, selects
   modules, confirms active actions, and validates every finding. The
   engine never escalates on its own.
-- **Strict scope enforcement.** The engagement scope file is loaded and
-  checked before any integration runs. The enforcer, the policy
-  classifier, and the confirmation gate each have an independent veto.
+- **Strict operator control.** Network-facing collection workflows are
+  gated by engagement scope, action policy, and confirmation. Local
+  sample-analysis workflows remain evidence-preserving and auditable.
 - **Evidence over assumptions.** Every finding carries `source` and
   `fact_or_inference`. Rule-based findings are labeled `fact`. AI
   findings are labeled `inference`. The reporting layer renders them
   differently so an analyst never mistakes one for the other.
 - **Local-first AI.** The Ollama client is the only LLM transport. There
-  is no remote AI client, no API key support, and no telemetry. AI tasks
-  read stored artifacts — they never invoke tools or observe the scope
-  file.
+  is no remote AI client and no telemetry. External intelligence
+  enrichments such as VirusTotal remain explicit read-only integrations,
+  not AI transports. AI tasks read stored evidence — they never invoke
+  tools or observe the scope file.
 - **Reproducibility and auditability.** A workspace directory is the
   unit of reproduction. It contains the config, scope, database,
   evidence, and audit log. Copy the directory to another Kali host and
@@ -33,8 +36,8 @@ disagree.
 
 ```
               ┌──────────────────────┐
-              │        CLI           │  drake init / scope / recon / web /
-              │   drake_x.cli       │  api / findings / ai / report / tools
+              │        CLI           │  drake init / apk / graph / ioc /
+              │   drake_x.cli       │  frida / report / ai / tools / recon
               └─────────┬────────────┘
                         ▼
               ┌──────────────────────┐
@@ -53,11 +56,11 @@ disagree.
           ▼         ▼          ▼
    ┌─────────┐ ┌────────┐ ┌──────────────┐
    │ Plugin  │ │ Safety │ │  Modules     │
-   │ loader  │ │ layer  │ │  (recon,     │
-   │         │ │        │ │   web, tls,  │
-   │         │ │        │ │   headers,   │
-   │         │ │        │ │   content,   │
-   │         │ │        │ │   api)       │
+   │ loader  │ │ layer  │ │  (apk,       │
+   │         │ │        │ │   native,    │
+   │         │ │        │ │   ioc,       │
+   │         │ │        │ │   recon,     │
+   │         │ │        │ │   web, api)  │
    └────┬────┘ └────────┘ └──────┬───────┘
         │                        │
         ▼                        ▼
@@ -89,11 +92,12 @@ disagree.
 
 ### CLI (`drake_x/cli/`)
 
-The `drake` binary is a Typer application with subcommands: `init`,
-`scope`, `recon`, `web`, `api`, `findings`, `ai`, `report`, `tools`.
-Each subcommand lives in its own module. The CLI resolves the workspace,
-loads the scope, builds the engine, and invokes it. It never runs tools
-directly.
+The `drake` binary is a Typer application with subcommands spanning APK
+analysis, graph exploration, IoC enrichment, Frida observation support,
+reporting, AI tasks, and supporting collection workflows such as recon
+and web analysis. Each subcommand lives in its own module. The CLI
+resolves the workspace, loads the relevant config, builds the engine,
+and invokes it. It never runs tools directly.
 
 ### Engine (`drake_x/core/engine.py`)
 
@@ -139,7 +143,8 @@ the same evidence.
 
 ### Scope enforcement (`drake_x/safety/`)
 
-Four independent layers, evaluated in order:
+Four independent layers, evaluated in order for target-facing
+collection workflows:
 
 1. **Target validation** (`scope.py`) — rejects unsafe inputs regardless
    of the scope file.
@@ -161,10 +166,11 @@ append-only by convention. Drake-X never rewrites or rotates it.
 
 ### Integrations (`drake_x/tools/`, `drake_x/integrations/`)
 
-Each integration is a `BaseTool` subclass that declares metadata
-(`ToolMeta`), builds a safe argv list, and is executed via
-`asyncio.create_subprocess_exec`. No shell strings are ever constructed.
-Output is captured, truncated, and stored as a `ToolResult`.
+Each integration is a `BaseTool` subclass or wrapper that declares
+metadata (`ToolMeta`), builds a safe argv list, and is executed via
+`asyncio.create_subprocess_exec`. No shell strings are ever
+constructed. Output is captured, truncated, and stored as a
+`ToolResult`.
 
 **Native analysis integrations** (`drake_x/integrations/native/`)
 provide structured Ghidra headless export for `.so` binaries. A custom
@@ -174,10 +180,10 @@ JSON that is normalized into `NativeBinaryAnalysis` models by
 native-analysis backend when Ghidra is available; the stdout-based
 wrapper in `drake_x/integrations/apk/ghidra.py` serves as the fallback.
 
-Integrations opt into the rate limiter via `ToolMeta.http_style=True`.
-The plugin loader discovers built-in adapters, real optional integrations
-(httpx, ffuf), and third-party packages registered through the
-`drake_x.integrations` entry-point group.
+Integrations opt into the rate limiter via `ToolMeta.http_style=True`
+when they touch network targets. The plugin loader discovers built-in
+adapters, real optional integrations, and third-party packages
+registered through the `drake_x.integrations` entry-point group.
 
 ### AI task layer (`drake_x/ai/tasks/`)
 
@@ -188,8 +194,8 @@ findings. They never invoke tools, never see the scope file, and never
 mutate storage directly. Their output is wrapped as
 `Finding(source=AI, fact_or_inference="inference")`.
 
-Implemented tasks: `summarize`, `classify`, `next_steps`, `observations`,
-`report_draft`, `dedupe`.
+Implemented tasks cover summarization, classification, next-step
+suggestion, reporting, deduplication, and APK-specific assessment.
 
 ### Reporting pipeline (`drake_x/reporting/`)
 
@@ -208,6 +214,14 @@ Five independent writers, each producing one output format:
 Session-to-session diff (`drake_x/normalize/diff.py`) compares artifacts
 from two sessions and produces added/removed/changed entries for
 tracking attack-surface changes over time.
+
+For v0.7, the reporting model should be read through four explicit
+evidence classes:
+
+- `fact` — observed parser/tool output
+- `inference` — analytic assessment or AI-backed interpretation
+- `external_intel` — supplementary enrichment such as VirusTotal
+- `hypothesis` — analyst-assisted dynamic validation targets
 
 ### Findings and evidence model (`drake_x/models/finding.py`)
 

@@ -1,10 +1,12 @@
-# Drake-X Operator Control (v0.6)
+# Drake-X Operator Control (v0.7)
 
 See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`architecture.md`](architecture.md), [`ux-layer.md`](ux-layer.md)
 
-Drake-X v0.6 introduces three capabilities focused on operator
-awareness, auditability, and workflow customization.
+Drake-X v0.7 uses operator control to keep evidence collection,
+malware-analysis triage, and reporting transparent and reviewable. The
+goal is not just awareness, but disciplined analyst control over what is
+observed, enriched, hypothesized, and reported.
 
 ## `drake status` — Workspace Observability
 
@@ -24,7 +26,8 @@ drake status -w my-engagement
 4. **Findings** — total count, severity breakdown (critical/high/medium
    /low/info), deduplicated count
 5. **Evidence Graph** — node/edge counts, top 3 most-connected nodes
-6. **Tools** — availability check for key Kali tools
+6. **Tools** — availability check for key Kali tools across collection,
+   malware analysis, dynamic observation, enrichment, and reporting
 
 The command never mutates state. It degrades gracefully when data is
 missing (no sessions, no graph, no scope file).
@@ -48,7 +51,7 @@ Sessions
   total:      7
   last ID:    abc123def456
   last run:   2026-04-10T14:30:00+00:00
-  by profile: recon_passive=3, safe=2, web-basic=2
+  by profile: recon_passive=3, apk_analyze=2, safe=2, web-basic=2
 
 Findings
   total:      23
@@ -67,8 +70,8 @@ Evidence Graph
     web:finding:f-abc123 (Missing HSTS) — 8 edge(s)
 
 Tools
-  available:  nmap, dig, whois, curl, strings, unzip
-  missing:    httpx, apktool, jadx, yara, rabin2
+  available:  nmap, dig, whois, curl, strings, unzip, apktool, ghidra
+  missing:    httpx, jadx, yara, frida, pandoc
 ```
 
 ## Audit-Logged Assist Sessions
@@ -179,5 +182,8 @@ drake mission run deep-web-audit example.com -w my-engagement --dry-run
 - **Operator control.** Custom missions are defined by the operator,
   validated before execution, and subject to all existing safety
   controls.
+- **Evidence classification awareness.** Operator-facing features should
+  help the analyst distinguish fact, inference, external enrichment, and
+  dynamic hypothesis rather than collapsing them into one narrative.
 - **Non-destructive.** All three features are additive. No existing
   commands, schemas, or behaviors are modified.

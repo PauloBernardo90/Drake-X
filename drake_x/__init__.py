@@ -1,10 +1,11 @@
-"""Drake-X: local-first offensive security framework for Kali Linux.
+"""Drake-X: local-first evidence-driven malware analysis platform.
 
-Drake-X orchestrates locally installed Kali tools, enforces operator-declared
-engagement scope, normalizes output into structured evidence, and optionally
-asks a local Ollama model for triage and classification. It does not perform
-exploitation, brute forcing, payload generation, or post-exploitation.
+Drake-X structures evidence across malware analysis, native inspection,
+external intelligence enrichment, and supporting collection workflows. It
+normalizes output into structured evidence and optionally asks a local Ollama
+model for triage and classification. It does not perform exploitation, brute
+forcing, payload generation, or post-exploitation.
 """
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 __all__ = ["__version__"]

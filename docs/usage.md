@@ -3,9 +3,11 @@
 See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`kali-setup.md`](kali-setup.md), [`llm-setup.md`](llm-setup.md)
 
-This is the long-form companion to the README "Quick tour" section. It
-walks you through a realistic engagement from `drake init` through
-report generation.
+This is the long-form companion to the README "Quick tour" section. For
+v0.7, read it as a walkthrough of Drake-X's evidence-driven analysis
+model: workspace setup first, then malware analysis and threat
+investigation workflows, with recon/web collection available as
+supporting evidence-gathering domains when needed.
 
 For the full docs index, see [`README.md`](README.md).
 If you want a compact command reference while following this guide, see
@@ -73,7 +75,31 @@ drake scope check api.acme.example -w acme-bug-bounty
 # ✓ ALLOW — api.acme.example
 ```
 
-## 3. List and pick a recon module
+## 3. Primary workflow: analyze a sample
+
+APK and malware-analysis workflows are now the primary product path.
+The fastest way to understand Drake-X is to run a sample through the
+analysis pipeline and inspect the resulting graph, report, and
+structured JSON.
+
+```bash
+drake apk analyze sample.apk -w acme-bug-bounty --vt --ghidra
+```
+
+This produces evidence and reports under:
+
+```text
+~/.drake-x/workspaces/acme-bug-bounty/runs/apk-<sample-name>/
+```
+
+Key outputs:
+
+- `apk_analysis.json` — canonical machine-readable result
+- `apk_report.md` — detailed technical report
+- `apk_executive.md` — concise executive summary
+- `evidence_graph.json` — graph-ready evidence representation
+
+## 4. Supporting workflow: list and pick a recon module
 
 ```bash
 drake recon list-modules
@@ -114,7 +140,7 @@ Output:
 › runnable: dig, whois, curl
 ```
 
-## 4. Run it
+## 5. Run it
 
 ```bash
 drake recon run api.acme.example -m recon_passive -w acme-bug-bounty
@@ -128,7 +154,7 @@ Drake-X prints a summary at the end:
 › next: `drake report generate 7a4b9e21c133 --workspace acme-bug-bounty`
 ```
 
-## 5. Run an active module (after confirming permission)
+## 6. Run an active module (after confirming permission)
 
 Edit `scope.yaml` and set `allow_active: true`. Then:
 
@@ -154,7 +180,7 @@ drake recon run api.acme.example -m recon_active -w acme-bug-bounty --dry-run
 drake recon run api.acme.example -m recon_active -w acme-bug-bounty --yes
 ```
 
-## 6. List and inspect findings
+## 7. List and inspect findings
 
 ```bash
 drake findings list -w acme-bug-bounty
@@ -163,7 +189,7 @@ drake findings list -w acme-bug-bounty --source parser
 drake findings show f-abc123 -w acme-bug-bounty
 ```
 
-## 7. Run AI tasks
+## 8. Run AI tasks
 
 (Requires Ollama — see [`llm-setup.md`](llm-setup.md).)
 
@@ -175,7 +201,7 @@ drake ai next-steps   7a4b9e21c133               -w acme-bug-bounty
 drake ai draft-report 7a4b9e21c133               -w acme-bug-bounty
 ```
 
-## 8. Generate reports
+## 9. Generate reports
 
 ```bash
 drake report list                                       -w acme-bug-bounty
@@ -201,7 +227,7 @@ By default reports are written under
 `~/.drake-x/workspaces/<name>/runs/<session-id>/`. Pass `-o <path>` to
 override.
 
-## 9. Audit log
+## 10. Audit log
 
 Every plan / run / deny / confirmation / finish event is appended as
 one JSON line to `<workspace>/audit.log`:
@@ -221,7 +247,7 @@ Sample entry:
 
 Treat this file as evidence in its own right — never edit it by hand.
 
-## 10. Listing supported tools
+## 11. Listing supported tools
 
 ```bash
 drake tools             # uses the default workspace if none is given

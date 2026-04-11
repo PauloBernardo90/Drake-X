@@ -3,7 +3,9 @@
 See also: [`README.md`](README.md), [`usage.md`](usage.md),
 [`kali-setup.md`](kali-setup.md), [`llm-setup.md`](llm-setup.md)
 
-Fast reference for the current Drake-X CLI.
+Fast reference for the current Drake-X CLI. For v0.7, read the command
+surface with APK/malware analysis first and supporting collection
+second.
 
 ## Basic Help
 
@@ -13,6 +15,16 @@ drake status -w <workspace>
 drake tools
 drake tools -w <workspace>
 drake flow
+```
+
+## Primary Analysis Flow
+
+```bash
+drake init <workspace>
+drake ai status -w <workspace>
+drake apk analyze ./sample.apk -w <workspace> --vt --ghidra
+drake graph show <session-id> -w <workspace> --format summary
+drake report generate <session-id> -f md -w <workspace>
 ```
 
 ## Workspace
@@ -46,7 +58,7 @@ drake scope show -w <workspace> --json
 drake scope check <target> -w <workspace>
 ```
 
-## Recon
+## Supporting Recon
 
 List modules:
 
@@ -84,7 +96,7 @@ content_discovery
 api_inventory
 ```
 
-## Web
+## Supporting Web
 
 Shortcut for `web_inspect`:
 
@@ -104,7 +116,7 @@ drake api ingest ./openapi.json -w <workspace>
 drake api ingest ./openapi.yaml -w <workspace> --target https://api.example.com
 ```
 
-## APK
+## APK / Malware Analysis
 
 Static analysis:
 
@@ -175,7 +187,7 @@ drake graph show <session-id> -w <workspace> --artifacts
 drake graph show <session-id> -w <workspace> -o ./graph.txt
 ```
 
-## AI
+## AI / Analyst Assistance
 
 Check Ollama connectivity:
 
@@ -227,10 +239,10 @@ Built-in multi-step workflows:
 ```bash
 drake mission list -w <workspace>
 drake mission show <mission> -w <workspace>
+drake mission run apk ./sample.apk -w <workspace>
 drake mission run recon <target> -w <workspace>
 drake mission run web <target> -w <workspace>
 drake mission run full <target> -w <workspace>
-drake mission run apk ./sample.apk -w <workspace>
 ```
 
 Useful options:

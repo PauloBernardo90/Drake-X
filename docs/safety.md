@@ -4,21 +4,23 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`architecture.md`](architecture.md), [`usage.md`](usage.md)
 
 Safety in Drake-X is not a feature bolted on after the fact. It is a
-core architectural property. Every code path that touches a target must
-pass through the safety layer. The engine cannot be configured or
-extended to bypass it.
+core architectural property. For v0.7, that means two things at once:
+target-facing collection workflows remain tightly scoped and controlled,
+and local sample-analysis workflows remain evidence-preserving,
+auditable, and non-weaponizing.
 
-Read this document before running Drake-X against any target. Re-read
-it any time you modify `scope.yaml` or enable active recon.
+Read this document before running Drake-X against any target or sample.
+Re-read it any time you modify `scope.yaml`, enable active recon, or
+introduce new malware-analysis tooling.
 
 ## Design Principles
 
 - **Human-in-the-loop by design.** The operator declares scope, selects
   modules, confirms active actions, and validates every finding. Drake-X
   never escalates autonomously.
-- **Strict scope enforcement.** The engagement scope file must exist
-  before any tool runs. Targets outside scope are refused. There is no
-  flag to override this.
+- **Strict operator control.** The engagement scope file must exist
+  before any target-facing tool runs. Targets outside scope are refused.
+  There is no flag to override this.
 - **Evidence over assumptions.** Findings produced by deterministic
   rules are labeled `fact`. Findings produced by the AI are labeled
   `inference`. Reports always show which is which.
@@ -32,7 +34,8 @@ it any time you modify `scope.yaml` or enable active recon.
 
 ## Authorization-first workflow
 
-Drake-X enforces an authorization-first workflow:
+Drake-X enforces an authorization-first workflow for network-facing
+collection:
 
 1. The operator runs `drake init` to create a workspace.
 2. The operator edits `scope.yaml` to declare the engagement scope,
@@ -45,11 +48,15 @@ Drake-X enforces an authorization-first workflow:
 5. Only then does `drake recon run` accept the target.
 
 No tool executes before the scope is loaded and the target is matched.
+Purely local sample analysis does not require network target scope, but
+it still inherits the same non-weaponization, auditability, and
+human-in-the-loop constraints.
 
 ## Enforcement layers
 
-Drake-X evaluates four independent layers in order. If any layer says
-no, the engine never reaches the integration.
+Drake-X evaluates four independent layers in order for target-facing
+collection. If any layer says no, the engine never reaches the
+integration.
 
 ```
 ┌──────────────────────┐  drake_x/scope.py
@@ -182,6 +189,16 @@ AI-generated interpretation:
 - **AI tasks never see the scope file.** Authorization metadata stays
   out of prompts.
 
+For v0.7, the reporting model expands this into four explicit evidence
+classes:
+
+- `fact` — observed parser/tool output
+- `inference` — analytic or AI-backed interpretation
+- `external_intel` — supplementary read-only enrichment such as
+  VirusTotal
+- `hypothesis` — dynamic-validation targets that require analyst
+  confirmation in a controlled environment
+
 ## Audit log
 
 Every engine event is appended as one JSON line to
@@ -216,6 +233,8 @@ Even with the most permissive scope file and `--yes`, Drake-X will not:
   suppresses such lines; the AI system prompt forbids them)
 - Communicate with a remote AI provider (there is no remote AI client
   in the code)
+- Upload malware samples automatically to external services
+- Auto-bypass protections during dynamic analysis
 - Write outside the workspace directory unless `-o` explicitly points
   elsewhere
 

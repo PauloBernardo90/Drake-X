@@ -1,4 +1,4 @@
-"""``drake findings`` — list, show and tag findings."""
+"""``drake findings`` — list, inspect, and review evidence-linked findings."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ from ..cli_theme import error, info, make_console, success
 from ..core.storage import WorkspaceStorage
 from . import _shared
 
-app = typer.Typer(no_args_is_help=True, help="List and inspect findings.")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="List and inspect findings across fact, inference, external intel, and analyst hypotheses.",
+)
 
 
 @app.command("list")

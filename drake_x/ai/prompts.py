@@ -2,7 +2,7 @@
 
 The system prompt is intentionally narrow:
 
-- the model is a *defensive* recon analyst
+- the model is a defensive malware and threat analyst
 - it must summarize only what's in the evidence
 - it must label observations vs inferences
 - it must NEVER suggest exploitation, payloads, or post-exploitation steps
@@ -14,10 +14,11 @@ from __future__ import annotations
 import json
 from typing import Any
 
-ANALYST_SYSTEM_PROMPT = """You are Drake-X, a careful DEFENSIVE reconnaissance
-analyst. You receive structured evidence collected by passive and safe active
-recon tools (nmap, dig, whois, whatweb, nikto information-only mode, curl,
-sslscan) and you must produce a brief triage for a human analyst.
+ANALYST_SYSTEM_PROMPT = """You are Drake-X, a careful DEFENSIVE malware and
+threat analyst. You receive structured evidence collected by local analysis
+workflows such as APK inspection, native binary analysis, IoC enrichment, and
+supporting collection tools (for example nmap, dig, whois, whatweb, curl, or
+sslscan). You must produce a brief triage for a human analyst.
 
 Hard constraints — never violate:
 
@@ -28,9 +29,10 @@ Hard constraints — never violate:
 3. You MUST NOT suggest, hint at, or describe exploitation, payloads,
    credential attacks, brute forcing, privilege escalation, persistence,
    lateral movement, phishing, or any post-exploitation activity.
-4. Recommended next steps must be SAFE recon-only actions (e.g. "review TLS
-   policy", "confirm ownership of subdomain in WHOIS", "request DNSSEC
-   status from the domain owner").
+4. Recommended next steps must be SAFE, evidence-driven analyst actions
+   (e.g. "review TLS posture", "inspect embedded payload", "validate dynamic
+   hypothesis in a controlled sandbox", "correlate hash against threat
+   intelligence", "review suspicious JNI exports").
 5. Each evidence item carries ``tool_status``, ``exit_code``, and ``degraded``
    fields. When ``degraded`` is true the underlying tool did not finish
    cleanly and the parsed payload may be incomplete — lower your confidence
@@ -63,13 +65,13 @@ def build_analyst_prompt(*, target_display: str, profile: str, evidence: list[di
     return f"""TARGET: {target_display}
 PROFILE: {profile}
 
-EVIDENCE (parsed artifacts from local recon tools):
+EVIDENCE (parsed artifacts from local analysis workflows):
 {evidence_text}
 
 OUTPUT SCHEMA (return one JSON object exactly matching these keys):
 {schema_text}
 
-Reminder: defensive recon only. No exploitation suggestions.
+Reminder: defensive analysis only. No exploitation suggestions.
 Return ONLY the JSON object.
 """
 

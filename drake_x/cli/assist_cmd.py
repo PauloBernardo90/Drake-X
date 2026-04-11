@@ -1,4 +1,4 @@
-"""``drake assist`` — guided AI-assisted operator mode with full audit logging.
+"""``drake assist`` — guided AI-assisted analyst mode with full audit logging.
 
 Every suggest/confirm/execute/skip step is persisted to the workspace
 database so the session is fully reproducible and reviewable.
@@ -27,17 +27,20 @@ from ..utils.ids import new_session_id
 from ..utils.timefmt import isoformat_utc, utcnow
 from . import _shared
 
-app = typer.Typer(no_args_is_help=True, help="AI-guided operator assistant with full audit logging.")
+app = typer.Typer(
+    no_args_is_help=True,
+    help="AI-guided analyst assistant with full audit logging and evidence-backed suggestions.",
+)
 
 
 @app.command("start")
 def start(
-    domain: str = typer.Argument(..., help="Domain of work: web, recon, apk."),
-    target: str = typer.Argument(..., help="Target domain/URL/IP."),
+    domain: str = typer.Argument(..., help="Domain of work: apk, web, recon."),
+    target: str = typer.Argument(..., help="Sample identifier, APK path hint, or supporting collection target."),
     workspace: str = typer.Option(None, "--workspace", "-w", help="Workspace name or path."),
     max_steps: int = typer.Option(10, "--max-steps", help="Maximum assist iterations."),
 ) -> None:
-    """Start an AI-guided assist session (fully audit-logged)."""
+    """Start an AI-guided assist session for investigation (fully audit-logged)."""
     console = make_console()
 
     ws = _shared.resolve_workspace(workspace)

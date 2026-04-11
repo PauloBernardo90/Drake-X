@@ -7,13 +7,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drake-x"
-version = "0.6.0"
-description = "Local-first offensive security framework for Kali Linux with local AI assistance and strict scope enforcement."
+version = "0.7.0"
+description = "Local-first evidence-driven malware analysis and threat investigation platform for Kali Linux with local AI assistance."
 readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "MIT" }
 authors = [{ name = "Drake-X Contributors" }]
-keywords = ["pentesting", "recon", "kali", "security", "ollama"]
+keywords = ["malware-analysis", "threat-intelligence", "kali", "security", "ollama"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Environment :: Console",
