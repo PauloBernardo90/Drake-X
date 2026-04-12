@@ -26,6 +26,14 @@ from typing import Any
 
 from ..models.pe import PeAnalysisResult
 
+# STIX bundles include several ``created`` / ``modified`` / ``valid_from``
+# fields. To make the bundle fully reproducible for identical input —
+# which analysts rely on for diffing and regression checks — we freeze
+# these to a deterministic sentinel (``1970-01-01T00:00:00+00:00``). The
+# actual generation time is recoverable from the workspace manifest and
+# the AI audit log; it does not need to live inside the STIX bundle.
+_STIX_TIMESTAMP_SENTINEL = "1970-01-01T00:00:00+00:00"
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -87,22 +95,30 @@ def render_pe_yara_candidates(result: PeAnalysisResult) -> str:
             ))
 
     # ---- Packer / high-entropy section candidate ---------------------
-    suspicious_sections = []
-    for s in result.sections:
-        if s.entropy >= 7.0 and s.is_executable:
-            suspicious_sections.append(s)
-    # Require at least one packer-name hit to justify emission.
-    packer_hits = [
-        p for p in result.suspicious_patterns
-        if p.get("finding_type") == "packer_section_name"
-    ]
-    if suspicious_sections and packer_hits:
-        names = sorted({s.name for s in suspicious_sections if s.name})
-        if names:
+    #
+    # A packer-style candidate rule is only justified when the SAME
+    # section supports both conditions: high entropy + executable AND a
+    # known packer-name hit. Emitting strings for an unrelated
+    # high-entropy section (e.g. ``.text``) under evidence from a
+    # packer-hit section (e.g. ``.UPX0``) would be a false evidence
+    # join — the rule would appear to cite packer evidence it does not
+    # have. We intersect the two sets strictly.
+    packer_hit_names = {
+        str(p.get("section", ""))
+        for p in result.suspicious_patterns
+        if p.get("finding_type") == "packer_section_name" and p.get("section")
+    }
+    if packer_hit_names:
+        valid_names = sorted({
+            s.name
+            for s in result.sections
+            if s.name in packer_hit_names and s.entropy >= 7.0 and s.is_executable
+        })
+        if valid_names:
             rules.append(_render_packer_rule(
                 rule_name=f"Drake_Candidate_PackerSection_{short}",
                 sha=sha,
-                section_names=names,
+                section_names=valid_names,
                 timestamp=timestamp,
             ))
 
@@ -129,16 +145,22 @@ def render_pe_stix_bundle(result: PeAnalysisResult) -> str:
     if not result.metadata.sha256:
         return ""
 
-    bundle_id = f"bundle--{uuid.uuid4()}"
-    now = _dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds")
+    sha = result.metadata.sha256
+    # All STIX timestamps are frozen to a sentinel to keep the bundle
+    # byte-reproducible across runs. See _STIX_TIMESTAMP_SENTINEL.
+    ts = _STIX_TIMESTAMP_SENTINEL
+
+    # Bundle ID is derived from the sample SHA-256 so the same sample
+    # always produces the same bundle ID.
+    bundle_id = f"bundle--{_stable_uuid('bundle', sha)}"
 
     file_obj = {
         "type": "file",
         "spec_version": "2.1",
-        "id": f"file--{_uuid_from_sha(result.metadata.sha256)}",
+        "id": f"file--{_uuid_from_sha(sha)}",
         "hashes": {
             "MD5": result.metadata.md5,
-            "SHA-256": result.metadata.sha256,
+            "SHA-256": sha,
         },
         "size": result.metadata.file_size,
     }
@@ -148,13 +170,17 @@ def render_pe_stix_bundle(result: PeAnalysisResult) -> str:
     for i, ind in enumerate(result.exploit_indicators):
         if ind.confidence < 0.5:
             continue
-        indicator_id = f"indicator--{uuid.uuid4()}"
+        # Indicator ID is stable for a given (sample, indicator-type,
+        # index, title) tuple so re-running the same analysis produces
+        # the same indicator UUID.
+        ind_key = f"{sha}|{ind.indicator_type.value}|{i}|{ind.title}"
+        indicator_id = f"indicator--{_stable_uuid('indicator', ind_key)}"
         objects.append({
             "type": "indicator",
             "spec_version": "2.1",
             "id": indicator_id,
-            "created": now,
-            "modified": now,
+            "created": ts,
+            "modified": ts,
             "name": f"Drake-X candidate: {ind.title}",
             "description": (
                 f"{ind.description} "
@@ -164,20 +190,23 @@ def render_pe_stix_bundle(result: PeAnalysisResult) -> str:
             "indicator_types": ["anomalous-activity"],
             "labels": ["candidate", "drake-x-generated"],
             "pattern_type": "stix",
-            "pattern": f"[file:hashes.'SHA-256' = '{result.metadata.sha256}']",
-            "valid_from": now,
+            "pattern": f"[file:hashes.'SHA-256' = '{sha}']",
+            "valid_from": ts,
             "confidence": int(ind.confidence * 100),
             "external_references": [
                 {"source_name": "mitre-attack", "external_id": tid}
                 for tid in ind.mitre_attck
             ],
         })
+        # Relationship ID is a function of (source, target, type) so it
+        # too is reproducible.
+        rel_key = f"{indicator_id}|{file_obj['id']}|indicates"
         objects.append({
             "type": "relationship",
             "spec_version": "2.1",
-            "id": f"relationship--{uuid.uuid4()}",
-            "created": now,
-            "modified": now,
+            "id": f"relationship--{_stable_uuid('relationship', rel_key)}",
+            "created": ts,
+            "modified": ts,
             "relationship_type": "indicates",
             "source_ref": indicator_id,
             "target_ref": file_obj["id"],
@@ -189,11 +218,16 @@ def render_pe_stix_bundle(result: PeAnalysisResult) -> str:
         "objects": objects,
         "x_drake_x": {
             "generator_version": "0.9.0",
-            "generated_at": now,
+            "generated_at": ts,
             "caveat": (
                 "All indicators in this bundle are candidate outputs from "
                 "Drake-X static analysis. They require analyst review and "
                 "dynamic validation before operational use."
+            ),
+            "reproducibility_note": (
+                "Timestamps are frozen to a sentinel to keep the bundle "
+                "byte-reproducible across identical runs. Real generation "
+                "time is recorded in the workspace manifest."
             ),
         },
     }
@@ -321,8 +355,19 @@ def _render_packer_rule(
 def _uuid_from_sha(sha256: str) -> str:
     """Produce a stable UUID from a SHA-256 hex digest.
 
-    STIX 2.1 requires UUIDs; deriving one from the hash keeps bundle IDs
-    reproducible across runs on the same sample.
+    STIX 2.1 requires UUIDs; deriving one from the hash keeps file-SDO
+    IDs reproducible across runs on the same sample.
     """
     # UUID5 with NAMESPACE_OID is stable and hex-input-friendly.
     return str(uuid.uuid5(uuid.NAMESPACE_OID, sha256))
+
+
+def _stable_uuid(kind: str, key: str) -> str:
+    """Derive a deterministic UUID for *kind*/*key*.
+
+    Used for STIX bundle, indicator, and relationship IDs so identical
+    analysis input produces identical STIX output across runs. ``kind``
+    is mixed in so a bundle ID and an indicator ID that happen to share
+    the same key space do not collide.
+    """
+    return str(uuid.uuid5(uuid.NAMESPACE_OID, f"drake-x:stix:{kind}:{key}"))

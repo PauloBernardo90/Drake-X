@@ -104,8 +104,9 @@ def test_root_artifact_present():
 
 def test_sections_and_imports_ingested():
     g = build_pe_graph(_fixture())
-    assert g.get_node(section_id(SHA, ".text")) is not None
-    assert g.get_node(section_id(SHA, ".UPX0")) is not None
+    # Fixture sections are ordered (.text, .UPX0) so ordinals are 0 and 1.
+    assert g.get_node(section_id(SHA, ".text", ordinal=0)) is not None
+    assert g.get_node(section_id(SHA, ".UPX0", ordinal=1)) is not None
     assert g.get_node(import_id(SHA, "kernel32.dll", "VirtualAllocEx")) is not None
     # all imports should link back to the root artifact via derived_from
     imp = import_id(SHA, "kernel32.dll", "VirtualAllocEx")
@@ -135,8 +136,8 @@ def test_indicator_links_supports_to_import():
 
 def test_shellcode_links_to_its_section():
     g = build_pe_graph(_fixture())
-    sec = section_id(SHA, ".UPX0")
-    # any shellcode node should have an edge from the section (SUPPORTS).
+    # .UPX0 is the second section in the fixture → ordinal 1.
+    sec = section_id(SHA, ".UPX0", ordinal=1)
     supp = [e for e in g.edges_from(sec) if e.edge_type == EdgeType.SUPPORTS]
     assert len(supp) >= 1
 

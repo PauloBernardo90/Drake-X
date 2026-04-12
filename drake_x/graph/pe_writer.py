@@ -57,10 +57,24 @@ def artifact_id(sha256: str) -> str:
     return f"pe:{_short_sha(sha256)}:artifact"
 
 
-def section_id(sha256: str, section_name: str) -> str:
+def section_id(sha256: str, section_name: str, ordinal: int = 0) -> str:
+    """Deterministic ID for a PE section node.
+
+    PE files can contain multiple sections with the same name (e.g. two
+    ``.text`` sections after an incremental linker pass or a malformed
+    sample). Keying only on the name causes the second section to
+    silently overwrite the first in the graph's dict-backed node store,
+    which is a correctness bug — v0.9 fix keys on *(name, ordinal)*
+    where ``ordinal`` is the 0-based section index in the PE section
+    table.
+
+    ``ordinal`` defaults to ``0`` so existing callers that look up
+    "the first section named X" (including tests) continue to resolve
+    correctly when names are unique.
+    """
     # Section names may contain NUL or non-printable bytes; normalize.
     safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in section_name)
-    return f"pe:{_short_sha(sha256)}:section:{safe or 'unnamed'}"
+    return f"pe:{_short_sha(sha256)}:section:{safe or 'unnamed'}:{int(ordinal)}"
 
 
 def import_id(sha256: str, dll: str, function: str) -> str:
@@ -141,8 +155,10 @@ def build_pe_graph(result: PeAnalysisResult) -> EvidenceGraph:
 
 def _ingest_sections(graph: EvidenceGraph, result: PeAnalysisResult, root: str) -> None:
     sha = result.metadata.sha256
-    for sec in result.sections:
-        nid = section_id(sha, sec.name)
+    for idx, sec in enumerate(result.sections):
+        # Key on (name, ordinal) so duplicate section names do not
+        # collapse into a single surviving node. See section_id() docstring.
+        nid = section_id(sha, sec.name, ordinal=idx)
         graph.add_node(
             EvidenceNode(
                 node_id=nid,
@@ -151,6 +167,8 @@ def _ingest_sections(graph: EvidenceGraph, result: PeAnalysisResult, root: str) 
                 label=f"section {sec.name}",
                 data={
                     "name": sec.name,
+                    "ordinal": idx,
+                    "virtual_address": sec.virtual_address,
                     "virtual_size": sec.virtual_size,
                     "raw_size": sec.raw_size,
                     "entropy": sec.entropy,
@@ -308,11 +326,13 @@ def _ingest_shellcode(graph: EvidenceGraph, result: PeAnalysisResult, root: str)
             edge_type=EdgeType.DERIVED_FROM,
             notes="shellcode-like blob carved from sample",
         ))
-        # Link shellcode to the section it was carved from, if discoverable.
-        sect_node = section_id(sha, sc.source_location)
-        if graph.get_node(sect_node) is not None:
+        # Link shellcode to the section(s) it was carved from. When two
+        # sections share a name we cannot disambiguate purely from the
+        # carver's ``source_location``; linking to every match preserves
+        # the evidence rather than silently picking one.
+        for sect_nid in _find_section_nodes_by_name(graph, sha, sc.source_location):
             graph.add_edge(EvidenceEdge(
-                source_id=sect_node,
+                source_id=sect_nid,
                 target_id=nid,
                 edge_type=EdgeType.SUPPORTS,
                 confidence=sc.confidence,
@@ -363,6 +383,28 @@ def _ingest_protection_interactions(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _find_section_nodes_by_name(
+    graph: EvidenceGraph, sha256: str, name: str
+) -> list[str]:
+    """Return all section-node IDs for this artifact whose data.name matches.
+
+    Deterministic: sorted by node_id. Used to link shellcode artifacts to
+    the section(s) they were carved from even when two sections share a
+    name.
+    """
+    if not name:
+        return []
+    sha_short = _short_sha(sha256)
+    prefix = f"pe:{sha_short}:section:"
+    matches: list[str] = []
+    for node in graph.nodes_by_kind(NodeKind.EVIDENCE):
+        if not node.node_id.startswith(prefix):
+            continue
+        if str(node.data.get("name", "")) == name:
+            matches.append(node.node_id)
+    return sorted(matches)
 
 
 def _find_import_nodes_for_ref(

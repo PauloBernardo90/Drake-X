@@ -104,17 +104,99 @@ def serialize_graph_context(
         "stats": sub.stats(),
     }
 
-    # Enforce character budget — drop edges first, then node data.
-    text = json.dumps(result, default=str)
-    if len(text) > max_chars:
-        result["edges"] = edges[: len(edges) // 2]
-        text = json.dumps(result, default=str)
-    if len(text) > max_chars:
-        for node in result["nodes"]:
-            node.pop("data", None)
-        text = json.dumps(result, default=str)
+    # Enforce the documented ``max_chars`` contract: the serialized form
+    # of the returned dict MUST be <= max_chars. The trimming is staged
+    # and deterministic — we never break structure, and we never return
+    # a dict whose serialization exceeds the bound.
+    result = _enforce_char_budget(result, max_chars=max_chars)
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Budget enforcement
+# ---------------------------------------------------------------------------
+
+
+def _serialized_size(obj: dict[str, Any]) -> int:
+    """Size of the compact JSON serialization that callers will embed."""
+    return len(json.dumps(obj, default=str))
+
+
+def _enforce_char_budget(
+    result: dict[str, Any], *, max_chars: int
+) -> dict[str, Any]:
+    """Iteratively trim *result* until its JSON serialization fits.
+
+    Trimming order (most-recoverable first):
+      1. drop edges from the tail, halving each round
+      2. strip non-essential ``data`` on nodes
+      3. shorten long labels
+      4. drop nodes from the tail, halving each round
+      5. last resort: return a minimal stats-only dict
+
+    Each step re-measures. The final returned dict is guaranteed to
+    serialize within ``max_chars``. Output stays deterministic because
+    we always drop tail items first and sort keys implicitly via the
+    already-sorted input produced upstream.
+    """
+    if _serialized_size(result) <= max_chars:
+        return result
+
+    edges = list(result.get("edges", []))
+    # --- step 1: halve edges until they're gone or the budget fits ----
+    while edges and _serialized_size(result) > max_chars:
+        edges = edges[: len(edges) // 2]
+        result["edges"] = edges
+    if _serialized_size(result) <= max_chars:
+        return result
+
+    # --- step 2: strip node data ---------------------------------------
+    for node in result.get("nodes", []):
+        node.pop("data", None)
+    if _serialized_size(result) <= max_chars:
+        return result
+
+    # --- step 3: shorten labels ----------------------------------------
+    for node in result.get("nodes", []):
+        label = node.get("label", "")
+        if isinstance(label, str) and len(label) > 24:
+            node["label"] = label[:24] + "..."
+    if _serialized_size(result) <= max_chars:
+        return result
+
+    # --- step 4: drop nodes from the tail, halving each round ----------
+    nodes = list(result.get("nodes", []))
+    while nodes and _serialized_size(result) > max_chars:
+        nodes = nodes[: len(nodes) // 2]
+        result["nodes"] = nodes
+    if _serialized_size(result) <= max_chars:
+        return result
+
+    # --- step 5: last resort — minimal stats-only dict -----------------
+    #
+    # We guarantee we never exceed the bound, even if the budget is so
+    # tight that only a summary fits. ``stats`` may itself be too large;
+    # we drop it if necessary and annotate the truncation.
+    stats = result.get("stats", {})
+    minimal: dict[str, Any] = {
+        "nodes": [],
+        "edges": [],
+        "stats": stats,
+        "truncated": True,
+    }
+    if _serialized_size(minimal) > max_chars:
+        minimal["stats"] = {}
+    if _serialized_size(minimal) > max_chars:
+        minimal = {"truncated": True}
+    if _serialized_size(minimal) > max_chars:
+        # Absolute fallback: an empty object (``"{}"`` is 2 chars) is
+        # the smallest valid JSON dict. For any ``max_chars >= 2`` this
+        # satisfies the bound. Smaller budgets are semantically
+        # meaningless for prompt context and the caller still gets a
+        # valid, parseable dict.
+        minimal = {}
+    return minimal
 
 
 def graph_context_to_prompt_json(
