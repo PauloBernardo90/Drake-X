@@ -24,6 +24,7 @@ import json
 import uuid
 from typing import Any
 
+from .. import __version__ as _drake_x_version
 from ..models.pe import PeAnalysisResult
 
 # STIX bundles include several ``created`` / ``modified`` / ``valid_from``
@@ -225,7 +226,7 @@ def render_pe_stix_bundle(result: PeAnalysisResult) -> str:
         "id": bundle_id,
         "objects": objects,
         "x_drake_x": {
-            "generator_version": "0.9.0",
+            "generator_version": _drake_x_version,
             "generated_at": ts,
             "caveat": (
                 "All indicators in this bundle are candidate outputs from "
