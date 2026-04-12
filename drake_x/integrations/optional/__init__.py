@@ -12,8 +12,8 @@ This package holds two kinds of integrations:
    ``build_command`` so plans and audits can reason about them, but whose
    ``run`` refuses to execute until the wrapper is implemented.
 
-In v0.3 ``httpx`` graduated from a stub to a real integration. The
-remaining tools stay as stubs and are scheduled for future passes.
+``httpx``, ``ffuf`` and ``subfinder`` have graduated to real integrations.
+The remaining tools stay as stubs and are scheduled for future passes.
 """
 
 from .amass import AmassStub
@@ -24,15 +24,14 @@ from .ffuf import FfufStub, FfufTool
 from .httpx import HttpxStub, HttpxTool
 from .naabu import NaabuStub
 from .nuclei import NucleiStub
-from .subfinder import SubfinderStub
+from .subfinder import SubfinderStub, SubfinderTool
 from .testssl import TestSslStub
 
 #: Real, executable optional integrations the plugin loader picks up.
-OPTIONAL_REAL_TOOLS = (HttpxTool, FfufTool)
+OPTIONAL_REAL_TOOLS = (HttpxTool, FfufTool, SubfinderTool)
 
 #: Stub integrations that ship with metadata only. They never execute.
 OPTIONAL_STUBS = (
-    SubfinderStub,
     AmassStub,
     NaabuStub,
     DnsxStub,
@@ -46,6 +45,7 @@ __all__ = [
     "HttpxTool",
     "HttpxStub",
     "FfufTool",
+    "SubfinderTool",
     "SubfinderStub",
     "AmassStub",
     "NaabuStub",

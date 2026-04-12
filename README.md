@@ -95,7 +95,11 @@ analyst review.
 **Cross-sample platform capabilities (v1.0).** The Evidence Graph
 persists to SQLite and is queryable workspace-wide. Operators can
 correlate samples by shared indicators, imports, shellcode prefixes,
-and IOC values (`drake correlate run -w …`); run a global node
+and IOC values (`drake correlate run -w …`). The default correlator
+surface is tuned for analyst signal rather than raw recall: `min_shared`
+defaults to `2`, universally common loader imports are suppressed, and
+rarer overlaps carry more weight than workspace-wide boilerplate. Operators
+can run a global node
 query across every persisted graph (`drake graph query -w …`);
 ingest external evidence with preserved provenance
 (`drake ingest evidence …`); generate structured multi-domain
@@ -138,7 +142,7 @@ default.
 `api_inventory`.
 
 **Integrations.** Built-in: nmap, dig, whois, whatweb, nikto, curl,
-sslscan. Real optional: httpx, ffuf. Stubs for future work: subfinder,
+sslscan. Real optional: httpx, ffuf, subfinder. Stubs for future work:
 amass, naabu, dnsx, nuclei, feroxbuster, eyewitness, testssl.
 
 **Mission workflows.** `drake mission run web/recon/apk/full <target>`
@@ -289,8 +293,14 @@ drake correlate run -w my-engagement
 # Query persisted graph nodes across the workspace
 drake graph query -w my-engagement --kind indicator --domain pe
 
-# Ingest external evidence with mandatory provenance
+# Register and ingest external evidence with mandatory provenance
+drake ingest register-producer sandbox-prod -w my-engagement --trust high
 drake ingest evidence ./sandbox.json -w my-engagement --type json
+
+# Merge into an analysis session only if the workspace policy explicitly
+# allows it; release workspaces default to blocking this operation
+drake ingest evidence ./sandbox.json -w my-engagement --session <session-id> \
+  --merge-into-analysis
 
 # Build and export a validation plan
 drake validate plan <session-id> -w my-engagement
@@ -331,6 +341,7 @@ For a compact command reference, see [`docs/cheat-sheet.md`](docs/cheat-sheet.md
 ## Documentation
 
 - [`docs/README.md`](docs/README.md) — documentation index
+- [`docs/drake-unleashed.md`](docs/drake-unleashed.md) — guided platform overview and operator-facing tour
 - [`docs/cheat-sheet.md`](docs/cheat-sheet.md) — compact CLI command reference
 - [`docs/usage.md`](docs/usage.md) — end-to-end usage walkthrough
 - [`docs/kali-setup.md`](docs/kali-setup.md) — Kali installation and setup

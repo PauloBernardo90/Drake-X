@@ -17,6 +17,7 @@ from .dns import normalize_dig
 from .ffuf import normalize_ffuf
 from .httpx import normalize_httpx
 from .nmap import normalize_nmap
+from .subfinder import normalize_subfinder
 from .web import normalize_curl, normalize_nikto, normalize_sslscan, normalize_whatweb
 from .whois import normalize_whois
 
@@ -32,6 +33,7 @@ _REGISTRY: dict[str, Callable[[ToolResult], Artifact | None]] = {
     "sslscan": normalize_sslscan,
     "httpx": normalize_httpx,
     "ffuf": normalize_ffuf,
+    "subfinder": normalize_subfinder,
 }
 
 
