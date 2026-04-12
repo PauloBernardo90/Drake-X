@@ -18,6 +18,7 @@ from . import (
     api_cmd,
     apk_cmd,
     assist_cmd,
+    console_cmd,
     findings_cmd,
     flow_cmd,
     frida_cmd,
@@ -25,6 +26,7 @@ from . import (
     init_cmd,
     ioc_cmd,
     mission_cmd,
+    pe_cmd,
     recon_cmd,
     report_cmd,
     scope_cmd,
@@ -68,11 +70,13 @@ app.add_typer(api_cmd.app, name="api")
 app.add_typer(apk_cmd.app, name="apk")
 app.add_typer(graph_cmd.app, name="graph")
 app.add_typer(ioc_cmd.app, name="ioc")
+app.add_typer(pe_cmd.app, name="pe")
 app.add_typer(frida_cmd.app, name="frida")
 app.add_typer(findings_cmd.app, name="findings")
 app.add_typer(ai_cmd.app, name="ai")
 app.add_typer(report_cmd.app, name="report")
 app.add_typer(tools_cmd.app, name="tools")
+app.add_typer(console_cmd.app, name="console")
 
 
 __all__ = ["app"]
