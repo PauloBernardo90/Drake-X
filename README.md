@@ -32,14 +32,18 @@ brute forcing, credential attacks, payload generation, post-exploitation,
 persistence, lateral movement, phishing, or weaponization of any kind.
 The code and the AI prompts both enforce this boundary.
 
-## Toward v0.7
+## Current Platform Status
 
-Drake-X v0.7 moves the project toward **evidence-driven AI-assisted
-malware analysis at scale**. The center of gravity is now malware
-analysis, native inspection, intelligence correlation, and
-analyst-assisted validation. Recon and web collection remain in the
-platform, but as supporting evidence-gathering domains rather than the
-primary product identity.
+Drake-X v0.8 delivers the first native-binary foundation layer for the
+platform. Windows PE static analysis is now a first-class workflow,
+alongside the existing APK/mobile pipeline, local intelligence
+enrichment, analyst-assisted dynamic validation, and evidence-linked
+reporting.
+
+The center of gravity is malware analysis, native inspection,
+intelligence correlation, and analyst-assisted validation. Recon and web
+collection remain in the platform, but as supporting evidence-gathering
+domains rather than the primary product identity.
 
 ## Design Principles
 
@@ -80,7 +84,9 @@ reporting for analyst review.
 sections, imports, exports, and resources. Assesses protection status
 (ASLR, DEP, CFG, SafeSEH, GS), classifies import risk with ATT&CK
 mapping, detects structural anomalies, and produces a structured
-technical report. Requires `pefile` (optional, degrades gracefully).
+technical report. Bounded disassembly is currently limited to the
+entry-point region and is emitted as a structured artifact. `pefile` and
+`capstone` are optional and degrade gracefully when absent.
 
 **Scope enforcement.** Operator-declared in-scope and out-of-scope
 network assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope
@@ -106,6 +112,11 @@ explains reasoning, and executes only with operator confirmation.
 
 **Flow navigation.** `drake flow` provides interactive menu-based
 navigation for operators who prefer not to memorize subcommand names.
+
+**Persistent console.** `drake console` opens a workspace-aware
+investigation console with persistent workspace/session context, a
+single banner render, and command dispatch over the existing CLI
+surface.
 
 **Workspace observability.** `drake status` shows workspace info, scope
 summary, session history, findings severity breakdown, evidence graph
@@ -223,6 +234,12 @@ drake api ingest /path/to/openapi.json -w my-engagement
 
 # Malware analysis of an Android APK
 drake apk analyze sample.apk -o ./apk-output --vt --ghidra
+
+# Malware analysis of a Windows PE sample
+drake pe analyze sample.exe -w my-engagement --vt
+
+# Enter the persistent investigation console
+drake console
 
 # Generate reports
 drake report generate <session-id> -f md        -w my-engagement
