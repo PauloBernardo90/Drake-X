@@ -155,6 +155,26 @@ Resolution order:
 1. `[virustotal].api_key` in `workspace.toml`
 2. `VT_API_KEY` environment variable
 
+## PE / Windows Malware Analysis
+
+Static analysis (v0.8):
+
+```bash
+drake pe analyze ./sample.exe
+drake pe analyze ./sample.exe -w <workspace>
+drake pe analyze ./sample.dll -w <workspace> --vt
+drake pe analyze ./sample.exe --deep
+```
+
+Outputs: `pe_analysis.json`, `pe_report.md`, `pe_executive.md`,
+`entry_disasm.json` (if Capstone available).
+
+Prerequisites (optional, degrade gracefully):
+
+```bash
+pip install pefile capstone
+```
+
 ## Findings
 
 ```bash

@@ -40,12 +40,23 @@ sudo apt install -y \
 Drake-X gracefully degrades when tools are missing — they show up under
 "missing" in the plan and the run continues without them.
 
-For v0.7, the most important optional toolchains after the base install
+For v0.8, the most important optional toolchains after the base install
 are:
 
 - `apktool`, `jadx`, `unzip`, `yara`, `radare2` for APK/static analysis
 - `ghidra` for deeper native analysis
 - `adb` and `frida` for analyst-assisted dynamic validation
+- `pefile` and `capstone` (Python) for PE/Windows malware analysis
+
+### PE analysis prerequisites (v0.8)
+
+```bash
+pip install pefile capstone
+```
+
+These are Python libraries, not system packages. Install them in the
+Drake-X virtualenv. Both are optional — PE analysis degrades gracefully
+without them.
 
 Install Frida if you want to use runtime observation workflows:
 

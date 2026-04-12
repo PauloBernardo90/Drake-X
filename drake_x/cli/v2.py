@@ -18,7 +18,6 @@ from . import (
     api_cmd,
     apk_cmd,
     assist_cmd,
-    console_cmd,
     findings_cmd,
     flow_cmd,
     frida_cmd,
@@ -76,6 +75,10 @@ app.add_typer(findings_cmd.app, name="findings")
 app.add_typer(ai_cmd.app, name="ai")
 app.add_typer(report_cmd.app, name="report")
 app.add_typer(tools_cmd.app, name="tools")
+
+# Console is imported lazily to avoid circular import (console_cmd
+# imports v2.app for command dispatch).
+from . import console_cmd  # noqa: E402
 app.add_typer(console_cmd.app, name="console")
 
 

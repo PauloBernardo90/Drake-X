@@ -56,7 +56,7 @@ alongside the core malware-analysis workflows.
           ▼         ▼          ▼
    ┌─────────┐ ┌────────┐ ┌──────────────┐
    │ Plugin  │ │ Safety │ │  Modules     │
-   │ loader  │ │ layer  │ │  (apk,       │
+   │ loader  │ │ layer  │ │  (apk, pe,   │
    │         │ │        │ │   native,    │
    │         │ │        │ │   ioc,       │
    │         │ │        │ │   recon,     │

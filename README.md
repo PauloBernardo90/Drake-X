@@ -71,9 +71,16 @@ primary product identity.
 campaign-similarity assessments, external intelligence enrichments, and
 dynamic-validation hypotheses all converge into a shared evidence graph.
 
-**Malware analysis workflows.** APK analysis, native binary inspection,
-VirusTotal correlation, Frida observation templates, Ghidra-backed
-deeper analysis, and evidence-linked reporting for analyst review.
+**Malware analysis workflows.** APK analysis, Windows PE static analysis
+(v0.8), native binary inspection, VirusTotal correlation, Frida
+observation templates, Ghidra-backed deeper analysis, and evidence-linked
+reporting for analyst review.
+
+**PE analysis (v0.8).** `drake pe analyze sample.exe` parses PE headers,
+sections, imports, exports, and resources. Assesses protection status
+(ASLR, DEP, CFG, SafeSEH, GS), classifies import risk with ATT&CK
+mapping, detects structural anomalies, and produces a structured
+technical report. Requires `pefile` (optional, degrades gracefully).
 
 **Scope enforcement.** Operator-declared in-scope and out-of-scope
 network assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope
