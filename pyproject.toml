@@ -33,12 +33,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pe = [
+    "pefile>=2023.2.7",
+]
+disasm = [
+    "capstone>=5.0.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "ruff>=0.4.0",
     "mypy>=1.10.0",
+    "pefile>=2023.2.7",
+    "capstone>=5.0.0",
 ]
 
 [project.scripts]
@@ -61,7 +69,9 @@ packages = [
     "drake_x.core",
     "drake_x.integrations",
     "drake_x.integrations.apk",
+    "drake_x.integrations.binary",
     "drake_x.integrations.builtin",
+    "drake_x.integrations.disasm",
     "drake_x.integrations.ioc",
     "drake_x.integrations.native",
     "drake_x.integrations.optional",
@@ -71,6 +81,7 @@ packages = [
     "drake_x.graph",
     "drake_x.normalize",
     "drake_x.normalize.apk",
+    "drake_x.normalize.binary",
     "drake_x.normalize.native",
     "drake_x.reporting",
     "drake_x.reports",
