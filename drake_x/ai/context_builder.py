@@ -37,6 +37,10 @@ DEFAULT_MAX_CHARS = 4000
 DEFAULT_MAX_EVIDENCE_ITEMS = 12
 
 
+def _is_external_node(node) -> bool:
+    return node.domain == "external" or bool(node.data.get("external"))
+
+
 @dataclass
 class BuiltContext:
     """Result of a context build.
@@ -91,14 +95,14 @@ def build_pe_exploit_context(
     # Indicators + protection-interactions (both NodeKind.INDICATOR)
     indicator_nodes = [
         n for n in graph.nodes_by_kind(NodeKind.INDICATOR)
-        if n.domain == "pe"
+        if n.domain == "pe" and not _is_external_node(n)
     ]
     seeds.extend(sorted(n.node_id for n in indicator_nodes))
 
     # Suspected shellcode artifacts (NodeKind.ARTIFACT except root).
     artifact_nodes = [
         n for n in graph.nodes_by_kind(NodeKind.ARTIFACT)
-        if n.domain == "pe" and n.node_id != root
+        if n.domain == "pe" and n.node_id != root and not _is_external_node(n)
     ]
     seeds.extend(sorted(n.node_id for n in artifact_nodes))
 
@@ -106,7 +110,7 @@ def build_pe_exploit_context(
     # useful for the model. Filter to risk=="high".
     high_risk_imports = [
         n for n in graph.nodes_by_kind(NodeKind.EVIDENCE)
-        if n.domain == "pe" and n.data.get("risk") == "high"
+        if n.domain == "pe" and n.data.get("risk") == "high" and not _is_external_node(n)
     ]
     seeds.extend(sorted(n.node_id for n in high_risk_imports))
 

@@ -44,6 +44,17 @@ class _Signature:
     by_basis: dict[str, dict[str, list[str]]]
 
 
+_IOC_DOMAINS = {"apk", "web", "recon"}
+
+
+def _is_external_node(node) -> bool:
+    return node.domain == "external" or bool(node.data.get("external"))
+
+
+def _graph_has_external(graph: EvidenceGraph) -> bool:
+    return any(_is_external_node(node) for node in graph.nodes)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -117,17 +128,17 @@ def query_nodes(
 def correlate_samples(
     storage: WorkspaceStorage,
     *,
-    min_shared: int = 1,
+    min_shared: int = 2,
 ) -> WorkspaceCorrelationReport:
     """Compute pairwise evidence-backed correlations across the workspace.
 
     ``min_shared`` is the minimum number of shared evidence pieces
-    required for a correlation to be surfaced; defaults to 1 so any
-    real shared signal surfaces. Bump it on crowded workspaces where
-    every sample imports ``GetProcAddress``.
+    required for a correlation to be surfaced; defaults to 2 to keep
+    noisy single-overlap workspaces from flooding the report surface.
     """
     graphs = load_all_graphs(storage)
     signatures = {sid: _extract_signature(g) for sid, g in graphs.items()}
+    has_external = {sid: _graph_has_external(g) for sid, g in graphs.items()}
 
     correlations: list[SampleCorrelation] = []
     ids = sorted(signatures.keys())
@@ -142,6 +153,13 @@ def correlate_samples(
                 source_session=sid_a,
                 target_session=sid_b,
                 shared=shared,
+                source_external=has_external[sid_a],
+                target_external=has_external[sid_b],
+                external_shared=any(
+                    any(nid.startswith("ext:") or nid.startswith("ingest:") for nid in item.source_node_ids)
+                    or any(nid.startswith("ext:") or nid.startswith("ingest:") for nid in item.target_node_ids)
+                    for item in shared
+                ),
                 score=_score(shared),
             ))
 
@@ -169,6 +187,9 @@ def _extract_signature(graph: EvidenceGraph) -> _Signature:
     }
 
     for node in graph.nodes:
+        if _is_external_node(node):
+            continue
+
         # Imports — key by dll!function (case-insensitive) for PE + ELF.
         if node.kind == NodeKind.EVIDENCE and (
             node.node_id.count(":import:") == 1
@@ -206,11 +227,12 @@ def _extract_signature(graph: EvidenceGraph) -> _Signature:
                     node.node_id
                 )
 
-        # IOCs — surface URL/IP/domain values from any node's data.
-        for iocish in ("url", "ip", "domain", "host"):
-            val = node.data.get(iocish)
-            if isinstance(val, str) and val:
-                by_basis["shared_ioc"].setdefault(val.lower(), []).append(node.node_id)
+        # IOCs — only from domains that are explicitly network/recon-oriented.
+        if node.domain in _IOC_DOMAINS:
+            for iocish in ("url", "ip", "domain", "host"):
+                val = node.data.get(iocish)
+                if isinstance(val, str) and val:
+                    by_basis["shared_ioc"].setdefault(val.lower(), []).append(node.node_id)
 
     # Sort node ID lists for determinism.
     for basis in by_basis:

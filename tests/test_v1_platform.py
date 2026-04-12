@@ -12,9 +12,12 @@ import json
 import pytest
 from pydantic import ValidationError
 
+from drake_x.ai.context_builder import build_pe_exploit_context
+from drake_x.ai.audit import MAX_RAW_RESPONSE_CHARS, build_record
 from drake_x.ai.audited_run import run_audited
 from drake_x.correlation import correlate_samples, query_nodes
 from drake_x.execution import LocalQueue, LocalWorker, new_job, register_handler
+from drake_x.graph.pe_writer import import_id
 from drake_x.integrations.ingest import adapter_registry, ingest_file
 from drake_x.models.elf import ElfAnalysisResult, ElfHeader, ElfImport, ElfMetadata
 from drake_x.models.evidence_graph import (
@@ -24,6 +27,7 @@ from drake_x.models.evidence_graph import (
     EvidenceNode,
     NodeKind,
 )
+from drake_x.models.pe import PeAnalysisResult, PeMetadata
 from drake_x.models.external_evidence import ExternalEvidenceRecord, ExternalProvenance
 from drake_x.models.validation_plan import (
     PlanStatus,
@@ -103,7 +107,7 @@ def test_correlation_surfaces_shared_imports(tmp_path):
     ws = _workspace(tmp_path)
     _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
     _seed_session_with_graph(ws, "sess-b", _pe_like_graph(sha="b" * 64))
-    report = correlate_samples(ws.storage)
+    report = correlate_samples(ws.storage, min_shared=1)
     assert report.session_count == 2
     assert len(report.correlations) == 1
     c = report.correlations[0]
@@ -129,7 +133,7 @@ def test_correlation_no_false_positives_on_unique_samples(tmp_path):
         label="i", data={"dll": "advapi.dll", "function": "UniqueApi"},
     ))
     _seed_session_with_graph(ws, "sess-c", g)
-    report = correlate_samples(ws.storage)
+    report = correlate_samples(ws.storage, min_shared=1)
     # a↔b still correlates via VirtualAllocEx; c↔{a,b} should not appear
     src_tgt = {(c.source_session, c.target_session) for c in report.correlations}
     assert ("sess-a", "sess-b") in src_tgt or ("sess-b", "sess-a") in src_tgt
@@ -141,6 +145,29 @@ def test_global_query_filters_by_kind_and_domain(tmp_path):
     _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
     rows = query_nodes(ws.storage, kind="evidence", domain="pe")
     assert any(r["label"].startswith("import ") for r in rows)
+
+
+def test_correlation_excludes_external_nodes_by_default(tmp_path):
+    ws = _workspace(tmp_path)
+    _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
+
+    payload = {
+        "source_tool": "hostile-feed",
+        "records": [
+            {
+                "kind": "evidence",
+                "label": "fake import",
+                "data": {"dll": "kernel32.dll", "function": "VirtualAllocEx"},
+            }
+        ],
+    }
+    p = tmp_path / "hostile.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+    ingest_file(file=p, adapter_name="json", storage=ws.storage)
+
+    report = correlate_samples(ws.storage, min_shared=1)
+    assert report.session_count == 2
+    assert report.correlations == []
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +240,59 @@ def test_ingest_root_id_is_deterministic_for_same_file(tmp_path):
     assert len(roots) == 1
 
 
+def test_ingest_refuses_merge_into_analysis_without_explicit_flag(tmp_path):
+    ws = _workspace(tmp_path)
+    _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
+    payload = [{"kind": "finding", "label": "hostile", "data": {}}]
+    p = tmp_path / "hostile.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="merge external evidence"):
+        ingest_file(
+            file=p,
+            adapter_name="json",
+            storage=ws.storage,
+            session_id="sess-a",
+        )
+
+
+def test_ingest_dedupes_edges_on_repeat_merge(tmp_path):
+    ws = _workspace(tmp_path)
+    payload = [{"kind": "finding", "label": "ok", "data": {}}]
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = ingest_file(file=p, adapter_name="json", storage=ws.storage)
+    ingest_file(
+        file=p,
+        adapter_name="json",
+        storage=ws.storage,
+        session_id=result.session_id,
+    )
+    graph = ws.storage.load_evidence_graph(result.session_id)
+    assert graph is not None
+    edge_keys = {(e.source_id, e.target_id, e.edge_type.value) for e in graph.edges}
+    assert len(edge_keys) == len(graph.edges)
+
+
+def test_ingest_graph_payload_is_deterministic_across_reingest(tmp_path):
+    ws = _workspace(tmp_path)
+    payload = [{"kind": "finding", "label": "ok", "data": {}}]
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = ingest_file(file=p, adapter_name="json", storage=ws.storage)
+    graph_a = ws.storage.load_evidence_graph(result.session_id)
+    assert graph_a is not None
+    first = graph_a.to_json(indent=2)
+
+    ingest_file(file=p, adapter_name="json", storage=ws.storage, session_id=result.session_id)
+    graph_b = ws.storage.load_evidence_graph(result.session_id)
+    assert graph_b is not None
+    second = graph_b.to_json(indent=2)
+    assert first == second
+
+
 # ---------------------------------------------------------------------------
 # Phase 3 — validation plan
 # ---------------------------------------------------------------------------
@@ -274,6 +354,48 @@ def test_validation_plan_built_from_pe_indicators(tmp_path):
     _seed_session_with_graph(ws, "sess-1", g)
     plan = build_plan_for_session(ws.storage, "sess-1")
     assert any(item.priority == Priority.HIGH for item in plan.items)
+
+
+def test_validation_plan_external_findings_are_low_priority(tmp_path):
+    ws = _workspace(tmp_path)
+    g = EvidenceGraph()
+    g.add_node(EvidenceNode(
+        node_id="ext:json:sess-1:0",
+        kind=NodeKind.FINDING,
+        domain="external",
+        label="Stage-1 loader confirmed",
+        data={
+            "external": True,
+            "provenance": {"adapter": "json", "source_tool": "feed", "trust": "high"},
+        },
+    ))
+    _seed_session_with_graph(ws, "sess-1", g)
+    plan = build_plan_for_session(ws.storage, "sess-1")
+    assert len(plan.items) == 1
+    assert plan.items[0].priority == Priority.LOW
+
+
+def test_validation_plan_shellcode_high_requires_corroboration(tmp_path):
+    ws = _workspace(tmp_path)
+    g = EvidenceGraph()
+    g.add_node(EvidenceNode(
+        node_id="pe:abc:artifact",
+        kind=NodeKind.ARTIFACT,
+        domain="pe",
+        label="pe",
+        data={"sha256": "a" * 64},
+    ))
+    g.add_node(EvidenceNode(
+        node_id="pe:abc:shellcode:1000:0",
+        kind=NodeKind.ARTIFACT,
+        domain="pe",
+        label="suspected shellcode",
+        data={"confidence": 0.7, "entropy": 4.2, "source_location": ".text"},
+    ))
+    _seed_session_with_graph(ws, "sess-2", g)
+    plan = build_plan_for_session(ws.storage, "sess-2")
+    assert len(plan.items) == 1
+    assert plan.items[0].priority == Priority.MEDIUM
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +462,52 @@ def test_run_audited_records_failure(tmp_path, monkeypatch):
     recs = read_records(audit_dir, "stub_fail")
     assert len(recs) == 1
     assert recs[0].ok is False
+
+
+def test_build_record_truncates_raw_response():
+    rec = build_record(
+        task="exploit_assessment",
+        model="m",
+        prompt="p",
+        context_node_ids=[],
+        raw_response="A" * (MAX_RAW_RESPONSE_CHARS + 25),
+        parsed=None,
+    )
+    assert len(rec.raw_response) == MAX_RAW_RESPONSE_CHARS
+    assert any("raw response truncated" in note for note in rec.truncation_notes)
+
+
+def test_pe_context_builder_excludes_external_nodes_from_prompt_context():
+    graph = EvidenceGraph()
+    root = "pe:aaaaaaaaaaaaaaaa:artifact"
+    graph.add_node(EvidenceNode(
+        node_id=root,
+        kind=NodeKind.ARTIFACT,
+        domain="pe",
+        label="pe sample",
+        data={"sha256": "a" * 64},
+    ))
+    graph.add_node(EvidenceNode(
+        node_id="pe:aaaaaaaaaaaaaaaa:indicator:injection_chain:0",
+        kind=NodeKind.INDICATOR,
+        domain="pe",
+        label="native indicator",
+        data={"indicator_type": "injection_chain", "severity": "high"},
+    ))
+    graph.add_node(EvidenceNode(
+        node_id="ext:json:sess:0",
+        kind=NodeKind.INDICATOR,
+        domain="external",
+        label="external indicator",
+        data={"external": True, "indicator_type": "injection_chain", "severity": "high"},
+    ))
+
+    built = build_pe_exploit_context(
+        graph=graph,
+        pe_result=PeAnalysisResult(metadata=PeMetadata(sha256="a" * 64)),
+        target_display="sample.exe",
+    )
+    assert "ext:json:sess:0" not in built.context_node_ids
 
 
 # ---------------------------------------------------------------------------
@@ -423,9 +591,21 @@ def test_case_report_indexes_sessions_and_correlations(tmp_path):
     assert len(report.sessions) == 2
     md = render_case_report_markdown(report)
     assert "Drake-X Case Report" in md
+
+
+def test_case_report_marks_external_sessions(tmp_path):
+    ws = _workspace(tmp_path)
+    payload = [{"kind": "finding", "label": "ok", "data": {}}]
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+    ingest_file(file=p, adapter_name="json", storage=ws.storage)
+
+    report = build_case_report(ws.storage, workspace="w")
+    md = render_case_report_markdown(report)
+    assert "external" in md
     assert "Session Index" in md
     assert "Cross-Session Correlations" in md
-    assert "sample" in md
+    assert "ingest" in md
 
 
 # ---------------------------------------------------------------------------

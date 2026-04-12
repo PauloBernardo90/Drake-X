@@ -8,13 +8,13 @@ evidence is always distinguishable from Drake-generated evidence.
 
 from __future__ import annotations
 
-import datetime as _dt
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 
 TrustLevel = Literal["low", "medium", "high"]
+INGESTED_AT_SENTINEL = "1970-01-01T00:00:00+00:00"
 
 
 class ExternalProvenance(BaseModel):
@@ -25,7 +25,7 @@ class ExternalProvenance(BaseModel):
     source_tool: str = Field(description="Originating tool / producer identifier.")
     source_file: str = Field(description="Absolute or relative path of the ingested file.")
     ingested_at: str = Field(
-        default_factory=lambda: _dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds"),
+        default=INGESTED_AT_SENTINEL,
     )
     adapter: str = Field(description="Drake-X adapter name that produced the record.")
     trust: TrustLevel = "medium"

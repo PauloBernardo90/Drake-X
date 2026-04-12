@@ -19,7 +19,7 @@ app = typer.Typer(
 @app.command("run")
 def run(
     workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace name or path."),
-    min_shared: int = typer.Option(1, "--min-shared", help="Minimum shared-evidence count."),
+    min_shared: int = typer.Option(2, "--min-shared", help="Minimum shared-evidence count."),
     output: str = typer.Option(
         "text", "--format", "-f",
         help="Output format: 'text' or 'json'.",

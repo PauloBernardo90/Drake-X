@@ -19,6 +19,7 @@ def register(app: typer.Typer) -> None:
     ) -> None:
         """Run static analysis on an ELF binary (Linux / IoT native)."""
         from ..modules.elf_analyze import run_analysis
+        from ..graph.pe_writer import dedupe_graph
         from ..normalize.binary.elf_normalize import build_elf_graph
         from ..reporting.elf_report_writer import render_elf_markdown, render_elf_json
 
@@ -55,7 +56,7 @@ def register(app: typer.Typer) -> None:
         if result.tools_skipped:
             warn(console, f"tools skipped: {', '.join(result.tools_skipped)}")
 
-        graph = build_elf_graph(result)
+        graph = dedupe_graph(build_elf_graph(result))
         (work_dir / "elf_analysis.json").write_text(render_elf_json(result), encoding="utf-8")
         (work_dir / "elf_report.md").write_text(render_elf_markdown(result), encoding="utf-8")
         (work_dir / "elf_graph.json").write_text(graph.to_json(indent=2), encoding="utf-8")

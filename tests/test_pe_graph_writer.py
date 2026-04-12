@@ -150,6 +150,12 @@ def test_ids_are_deterministic():
     assert ids1 == ids2
 
 
+def test_import_id_sanitizes_untrusted_function_name():
+    nid = import_id(SHA, "kernel32.dll", 'X:shellcode:0:poisoned "weird"')
+    assert ":shellcode:" not in nid.split(":import:", 1)[1]
+    assert '"' not in nid
+
+
 def test_dedupe_removes_duplicate_edges():
     g = build_pe_graph(_fixture())
     # Insert a duplicate edge with lower confidence; dedupe should keep

@@ -67,6 +67,8 @@ def render_pe_yara_candidates(result: PeAnalysisResult) -> str:
     for i, sc in enumerate(result.suspected_shellcode):
         if not sc.preview_hex or len(sc.preview_hex) < 16:
             continue
+        if not _preview_is_ruleworthy(sc.preview_hex, sc.entropy):
+            continue
         # Use the first 16 bytes (32 hex chars) of the preview as the
         # string. Longer previews risk false negatives from minor variants.
         hex_bytes = sc.preview_hex[:32]
@@ -354,6 +356,25 @@ def _render_packer_rule(
         f"        any of ($sec_*) and filesize < 50MB\n"
         f"}}"
     )
+
+
+def _preview_is_ruleworthy(preview_hex: str, entropy: float) -> bool:
+    raw_hex = preview_hex[:32]
+    if len(raw_hex) % 2 != 0:
+        return False
+    try:
+        raw = bytes.fromhex(raw_hex)
+    except ValueError:
+        return False
+    if len(raw) < 8:
+        return False
+    unique = len(set(raw))
+    if unique < 4:
+        return False
+    dominant = max(raw.count(b) for b in set(raw))
+    if dominant > len(raw) // 2:
+        return False
+    return entropy >= 4.5
 
 
 # ---------------------------------------------------------------------------

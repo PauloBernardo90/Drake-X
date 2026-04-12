@@ -35,6 +35,10 @@ def build_plan_for_session(storage, session_id: str) -> ValidationPlan:
     items: list[ValidationItem] = []
     counter = 0
 
+    supports: dict[str, list] = {}
+    for edge in graph.edges:
+        supports.setdefault(edge.target_id, []).append(graph.get_node(edge.source_id))
+
     for node in graph.nodes:
         if node.domain == "pe" and node.kind == NodeKind.INDICATOR and \
                 "indicator:" in node.node_id:
@@ -65,6 +69,12 @@ def build_plan_for_session(storage, session_id: str) -> ValidationPlan:
         elif node.domain == "pe" and node.kind == NodeKind.ARTIFACT and \
                 ":shellcode:" in node.node_id:
             counter += 1
+            priority = Priority.MEDIUM
+            if node.data.get("confidence", 0) >= 0.6 and _has_shellcode_corroboration(
+                node=node,
+                supporting_nodes=supports.get(node.node_id, []),
+            ):
+                priority = Priority.HIGH
             items.append(ValidationItem(
                 item_id=f"v-{counter:03d}",
                 domain="pe",
@@ -77,7 +87,7 @@ def build_plan_for_session(storage, session_id: str) -> ValidationPlan:
                 ],
                 expected_evidence="Disassembly showing control flow / behaviour",
                 suggested_tool="isolated debugger",
-                priority=Priority.HIGH if node.data.get("confidence", 0) >= 0.6 else Priority.MEDIUM,
+                priority=priority,
                 evidence_node_ids=[node.node_id],
             ))
 
@@ -117,7 +127,7 @@ def build_plan_for_session(storage, session_id: str) -> ValidationPlan:
                 ],
                 expected_evidence="Confirmation from Drake-generated evidence",
                 suggested_tool="drake correlate / drake graph query",
-                priority=Priority.MEDIUM,
+                priority=Priority.LOW,
                 evidence_node_ids=[node.node_id],
             ))
 
@@ -135,3 +145,18 @@ def _severity_to_priority(sev: str) -> Priority:
     if s == "low":
         return Priority.LOW
     return Priority.MEDIUM
+
+
+def _has_shellcode_corroboration(*, node, supporting_nodes: list[object | None]) -> bool:
+    entropy = node.data.get("entropy")
+    if isinstance(entropy, (int, float)) and entropy >= 6.5:
+        return True
+    for supporting in supporting_nodes:
+        if supporting is None:
+            continue
+        sec_entropy = supporting.data.get("entropy")
+        if isinstance(sec_entropy, (int, float)) and sec_entropy >= 6.0:
+            return True
+        if supporting.data.get("is_writable") and supporting.data.get("is_executable"):
+            return True
+    return False

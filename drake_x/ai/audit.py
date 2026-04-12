@@ -33,6 +33,7 @@ from typing import Any
 from ..logging import get_logger
 
 log = get_logger("ai.audit")
+MAX_RAW_RESPONSE_CHARS = 20_000
 
 
 @dataclass(frozen=True)
@@ -81,19 +82,26 @@ def build_record(
     ordering upstream.
     """
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    trunc_notes = list(truncation_notes or [])
+    raw = raw_response or ""
+    if len(raw) > MAX_RAW_RESPONSE_CHARS:
+        raw = raw[:MAX_RAW_RESPONSE_CHARS]
+        trunc_notes.append(
+            f"raw response truncated to {MAX_RAW_RESPONSE_CHARS} chars for audit log"
+        )
     return AIAuditRecord(
         task=task,
         model=model,
         timestamp=_dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds"),
         prompt_sha256=prompt_hash,
         context_node_ids=sorted(set(context_node_ids)),
-        raw_response=raw_response or "",
+        raw_response=raw,
         parsed=parsed,
-        truncation_notes=list(truncation_notes or []),
+        truncation_notes=trunc_notes,
         ok=ok,
         error=error,
         prompt_chars=len(prompt or ""),
-        response_chars=len(raw_response or ""),
+        response_chars=len(raw),
     )
 
 

@@ -53,6 +53,11 @@ def _short_sha(sha256: str) -> str:
     return sha256[:16] if sha256 else "unknown"
 
 
+def _sanitize_component(value: str, *, fallback: str = "unknown") -> str:
+    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in str(value))
+    return safe or fallback
+
+
 def artifact_id(sha256: str) -> str:
     return f"pe:{_short_sha(sha256)}:artifact"
 
@@ -73,7 +78,7 @@ def section_id(sha256: str, section_name: str, ordinal: int = 0) -> str:
     correctly when names are unique.
     """
     # Section names may contain NUL or non-printable bytes; normalize.
-    safe = "".join(c if c.isalnum() or c in "._-" else "_" for c in section_name)
+    safe = _sanitize_component(section_name, fallback="unnamed")
     return f"pe:{_short_sha(sha256)}:section:{safe or 'unnamed'}:{int(ordinal)}"
 
 
@@ -93,20 +98,22 @@ def import_id(
     empty, so existing callers that pass just ``(sha, dll, function)``
     for named imports continue to produce the same IDs.
     """
-    safe_dll = dll.lower().replace(" ", "_")
+    safe_dll = _sanitize_component(dll.lower())
     if function:
-        return f"pe:{_short_sha(sha256)}:import:{safe_dll}:{function}"
+        safe_func = _sanitize_component(function)
+        return f"pe:{_short_sha(sha256)}:import:{safe_dll}:{safe_func}"
     # ordinal-only import — disambiguate by ordinal
     ord_key = str(ordinal) if ordinal is not None else "unknown"
     return f"pe:{_short_sha(sha256)}:import:{safe_dll}:ord:{ord_key}"
 
 
 def protection_id(sha256: str, protection: str) -> str:
-    return f"pe:{_short_sha(sha256)}:protection:{protection.lower()}"
+    return f"pe:{_short_sha(sha256)}:protection:{_sanitize_component(protection.lower())}"
 
 
 def indicator_id(sha256: str, indicator_type: str, index: int) -> str:
-    return f"pe:{_short_sha(sha256)}:indicator:{indicator_type}:{index}"
+    safe_type = _sanitize_component(indicator_type)
+    return f"pe:{_short_sha(sha256)}:indicator:{safe_type}:{index}"
 
 
 def shellcode_id(sha256: str, offset: int, index: int) -> str:
@@ -114,7 +121,8 @@ def shellcode_id(sha256: str, offset: int, index: int) -> str:
 
 
 def protection_interaction_id(sha256: str, protection: str, index: int) -> str:
-    return f"pe:{_short_sha(sha256)}:protection_interaction:{protection.lower()}:{index}"
+    safe_protection = _sanitize_component(protection.lower())
+    return f"pe:{_short_sha(sha256)}:protection_interaction:{safe_protection}:{index}"
 
 
 def ai_assessment_id(sha256: str) -> str:

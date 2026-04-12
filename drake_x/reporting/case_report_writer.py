@@ -32,7 +32,18 @@ def build_case_report(storage, *, workspace: str) -> CaseReport:
         ))
     sess_summaries.sort(key=lambda s: (s.domain, s.session_id))
 
-    correlations = correlate_samples(storage, min_shared=1)
+    correlations = correlate_samples(storage, min_shared=2)
+    corr_rows = correlations.model_dump(mode="json")
+    external_sessions = {
+        sid for sid, graph in graphs.items()
+        if any(n.domain == "external" or n.data.get("external") for n in graph.nodes)
+    }
+    for row in corr_rows.get("correlations", []):
+        src = row.get("source_session", "")
+        dst = row.get("target_session", "")
+        row["source_external"] = src in external_sessions
+        row["target_external"] = dst in external_sessions
+        row["external_touching"] = row["source_external"] or row["target_external"]
 
     plans: dict[str, dict] = {}
     for sid in sorted(graphs.keys()):
@@ -43,7 +54,7 @@ def build_case_report(storage, *, workspace: str) -> CaseReport:
     return CaseReport(
         workspace=workspace,
         sessions=sess_summaries,
-        correlations=correlations.model_dump(mode="json"),
+        correlations=corr_rows,
         validation_plans=plans,
     )
 
@@ -60,12 +71,13 @@ def render_case_report_markdown(report: CaseReport) -> str:
         "",
     ]
     if report.sessions:
-        lines.append("| Session | Domain | Profile | Target | Nodes | Edges |")
-        lines.append("|---------|--------|---------|--------|-------|-------|")
+        lines.append("| Session | Domain | Profile | Target | Nodes | Edges | Flags |")
+        lines.append("|---------|--------|---------|--------|-------|-------|-------|")
         for s in report.sessions:
+            flags = "external" if s.profile == "ingest" or s.domain == "external" else "-"
             lines.append(
                 f"| `{s.session_id[:12]}` | {s.domain or '-'} | {s.profile} | "
-                f"{s.target_display[:40]} | {s.node_count} | {s.edge_count} |"
+                f"{s.target_display[:40]} | {s.node_count} | {s.edge_count} | {flags} |"
             )
     else:
         lines.append("_No persisted sessions with evidence graphs._")
@@ -77,12 +89,13 @@ def render_case_report_markdown(report: CaseReport) -> str:
     if not correlations:
         lines.append("_No cross-session correlations surfaced._")
     else:
-        lines.append("| Source | Target | Score | Shared |")
-        lines.append("|--------|--------|-------|--------|")
+        lines.append("| Source | Target | Score | Shared | Flags |")
+        lines.append("|--------|--------|-------|--------|-------|")
         for c in correlations:
+            flags = "[external]" if c.get("external_touching") else "-"
             lines.append(
                 f"| `{c['source_session'][:12]}` | `{c['target_session'][:12]}` | "
-                f"{c['score']:.2f} | {len(c['shared'])} |"
+                f"{c['score']:.2f} | {len(c['shared'])} | {flags} |"
             )
     lines.append("")
 

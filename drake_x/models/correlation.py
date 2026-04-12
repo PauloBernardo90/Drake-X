@@ -49,6 +49,9 @@ class SampleCorrelation(BaseModel):
     source_session: str
     target_session: str
     shared: list[SharedEvidence] = Field(default_factory=list)
+    source_external: bool = False
+    target_external: bool = False
+    external_shared: bool = False
     score: float = Field(
         default=0.0, ge=0.0, le=1.0,
         description="Deterministic strength based on number and kind of shared evidence.",
@@ -70,5 +73,6 @@ class WorkspaceCorrelationReport(BaseModel):
         default_factory=lambda: [
             "correlations are observations over shared evidence, not attribution",
             "score is a deterministic count-based heuristic, not a confidence probability",
+            "external ingested evidence is excluded from correlation by default",
         ],
     )

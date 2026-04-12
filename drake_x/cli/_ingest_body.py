@@ -24,6 +24,10 @@ def register(app: typer.Typer) -> None:
             help="Attach ingested evidence to an existing session. "
                  "If omitted, a new ingest-only session is created.",
         ),
+        merge_into_analysis: bool = typer.Option(
+            False, "--merge-into-analysis",
+            help="Required with --session when merging external evidence into a non-ingest session.",
+        ),
         trust: str = typer.Option(
             "medium", "--trust",
             help="Trust level stamp: low | medium | high.",
@@ -44,7 +48,10 @@ def register(app: typer.Typer) -> None:
         ws = _shared.resolve_workspace(workspace)
         result = ingest_file(
             file=file, adapter_name=type_,
-            storage=ws.storage, session_id=session_id, trust=trust,
+            storage=ws.storage,
+            session_id=session_id,
+            trust=trust,
+            allow_merge_into_analysis=merge_into_analysis,
         )
         success(console, f"ingested {result.node_count} node(s), {result.edge_count} edge(s)")
         info(console, f"session: [accent]{result.session_id}[/accent]")

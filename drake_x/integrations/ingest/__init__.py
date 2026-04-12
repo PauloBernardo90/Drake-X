@@ -23,10 +23,10 @@ normalized records or skip it.
 
 from __future__ import annotations
 
-import datetime as _dt
 import hashlib
 from pathlib import Path
 
+from ...graph.pe_writer import dedupe_graph
 from ...models.evidence_graph import (
     EdgeType,
     EvidenceEdge,
@@ -51,6 +51,7 @@ def ingest_file(
     storage,
     session_id: str | None = None,
     trust: str = "medium",
+    allow_merge_into_analysis: bool = False,
 ) -> IngestResult:
     """Run an adapter over *file* and persist results to the workspace.
 
@@ -65,6 +66,10 @@ def ingest_file(
 
     records = adapter.parse(Path(file), trust=trust)
     warnings: list[str] = []
+    if trust == "high":
+        warnings.append(
+            "external trust is analyst-declared, not attested; treat high trust as advisory only"
+        )
 
     # Resolve or create a session.
     if session_id is None:
@@ -82,12 +87,21 @@ def ingest_file(
         )
         storage.legacy.save_session(sess)
         session_id = sess.id
+    else:
+        existing = storage.legacy.load_session(session_id)
+        if existing is None:
+            raise ValueError(f"session not found: {session_id}")
+        profile = str(getattr(existing, "profile", "") or "")
+        if profile != "ingest" and not allow_merge_into_analysis:
+            raise ValueError(
+                "refusing to merge external evidence into a non-ingest session without "
+                "--merge-into-analysis"
+            )
 
     # Merge records into the existing graph if present; otherwise start fresh.
     graph = storage.load_evidence_graph(session_id) or EvidenceGraph()
 
     # Add a root "ingest" node representing this ingestion run.
-    ts = _dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds")
     file_hash = hashlib.sha256(Path(file).read_bytes()).hexdigest()[:16]
     ingest_root_id = f"ingest:{adapter_name}:{session_id}:{file_hash}"
     graph.add_node(EvidenceNode(
@@ -99,7 +113,6 @@ def ingest_file(
             "adapter": adapter_name,
             "source_file": str(file),
             "trust": trust,
-            "ingested_at": ts,
             "external": True,  # marker: this is imported, not Drake-generated
         },
     ))
@@ -128,7 +141,7 @@ def ingest_file(
         node_count += 1
         edge_count += 1
 
-    storage.save_evidence_graph(session_id, graph)
+    storage.save_evidence_graph(session_id, dedupe_graph(graph))
 
     return IngestResult(
         session_id=session_id,

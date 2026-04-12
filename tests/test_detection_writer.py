@@ -36,7 +36,7 @@ def test_shellcode_yara_candidate_emitted():
                 entropy=7.5,
                 detection_reason="x86 prologue",
                 confidence=0.6,
-                preview_hex="909090909090eb10",
+                preview_hex="558bec83ec10ff7508e8aa55cc33",
             ),
         ],
     )
@@ -46,6 +46,24 @@ def test_shellcode_yara_candidate_emitted():
     assert "analyst review required" in out
     # Hex string is formatted as "{ AA BB ... }"
     assert "{" in out and "}" in out
+
+
+def test_shellcode_yara_skips_low_rarity_nop_sled_preview():
+    r = PeAnalysisResult(
+        metadata=PeMetadata(sha256=SHA),
+        suspected_shellcode=[
+            SuspectedShellcodeArtifact(
+                source_location=".text",
+                offset=0x1000,
+                size=256,
+                entropy=5.2,
+                detection_reason="possible shellcode",
+                confidence=0.6,
+                preview_hex="90909090909090909090909090909090",
+            ),
+        ],
+    )
+    assert "Drake_Candidate_Shellcode_" not in render_pe_yara_candidates(r)
 
 
 def test_injection_chain_yara_candidate_emitted():
