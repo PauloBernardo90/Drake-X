@@ -23,5 +23,10 @@ Architecture and safety:
 Analysis and evidence:
 
 - [`apk-analysis.md`](apk-analysis.md) — APK static analysis workflow
+- [`native-analysis.md`](native-analysis.md) — ELF/native workflow and APK native coverage
 - [`evidence-model.md`](evidence-model.md) — evidence graph model and relationships
 - [`graph-analysis.md`](graph-analysis.md) — evidence graph analysis and usage
+- [`ingestion.md`](ingestion.md) — external evidence ingestion and provenance model
+- [`validation-plan.md`](validation-plan.md) — structured validation plans
+- [`reporting.md`](reporting.md) — per-session and case-level reporting surfaces
+- [`ai-auditability.md`](ai-auditability.md) — platform-wide AI auditability

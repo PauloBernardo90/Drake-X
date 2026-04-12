@@ -94,6 +94,8 @@ Resolution order:
 drake pe analyze ./sample.exe -w <workspace>
 drake pe analyze ./sample.dll -w <workspace> --vt
 drake pe analyze ./sample.exe -w <workspace> --deep
+drake pe analyze ./sample.exe -w <workspace> --ai-exploit-assessment
+drake pe analyze ./sample.exe -w <workspace> --detection-output
 ```
 
 Optional prerequisites:
@@ -108,7 +110,10 @@ Primary outputs:
 pe_analysis.json       # Full analysis result (JSON)
 pe_report.md           # Technical report with exploit-awareness sections (v0.9)
 pe_executive.md        # Executive summary
+pe_graph.json          # Canonical PE Evidence Graph
 entry_disasm.json      # Bounded disassembly artifact
+pe_candidates.yar      # Candidate YARA (with --detection-output)
+pe_stix.json           # Candidate STIX bundle (with --detection-output)
 ```
 
 v0.9 report includes (when detected):
@@ -124,10 +129,13 @@ drake report list -w <workspace>
 drake findings list -w <workspace>
 drake findings show <finding-id> -w <workspace>
 drake graph show <session-id> -w <workspace> --format summary
+drake graph query -w <workspace> --kind indicator --domain pe
+drake correlate run -w <workspace>
 drake report generate <session-id> -f md -w <workspace>
 drake report generate <session-id> -f executive -w <workspace>
 drake report generate <session-id> -f json -w <workspace>
 drake report diff <session-a> <session-b> -w <workspace>
+drake report case -w <workspace> -o case_report.md
 ```
 
 ## 7. AI Tasks
@@ -143,7 +151,19 @@ drake ai dedupe <session-id> -w <workspace>
 drake ai dedupe <session-id> -w <workspace> --apply
 ```
 
-## 8. Supporting Collection
+All v1.0 AI task invocations write audit records under `ai_audit/`.
+
+## 8. ELF and External Evidence
+
+```bash
+drake elf analyze ./sample.elf -w <workspace>
+drake ingest list-adapters
+drake ingest evidence ./sandbox.json -w <workspace> --type json
+drake validate plan <session-id> -w <workspace>
+drake validate export <session-id> -w <workspace> -o validation_plan.md
+```
+
+## 9. Supporting Collection
 
 Supporting evidence-gathering remains available, but is not the primary
 product workflow.
@@ -156,7 +176,7 @@ drake web inspect <url-or-domain> -w <workspace>
 drake api ingest ./openapi.json -w <workspace>
 ```
 
-## 9. Common Investigation Sequences
+## 10. Common Investigation Sequences
 
 APK triage:
 

@@ -115,6 +115,23 @@ class Workspace:
         self.root.mkdir(parents=True, exist_ok=True)
         self.runs_dir.mkdir(parents=True, exist_ok=True)
 
+    @property
+    def storage(self):
+        """Lazy :class:`WorkspaceStorage` handle for this workspace (v1.0).
+
+        Constructed on first access; subsequent accesses reuse the
+        same instance. Callers can still construct one explicitly
+        with ``WorkspaceStorage(ws.db_path)`` — the property is a
+        convenience for the v1.0 platform surfaces (correlation,
+        ingest, validation, case reports).
+        """
+        from .storage import WorkspaceStorage
+        cached = getattr(self, "_storage", None)
+        if cached is None:
+            cached = WorkspaceStorage(self.db_path)
+            object.__setattr__(self, "_storage", cached)
+        return cached
+
     # ----- factory methods -------------------------------------------------
 
     @classmethod

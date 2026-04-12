@@ -202,3 +202,30 @@ def diff(
             console,
             f"added={len(result.added)} removed={len(result.removed)} changed={len(result.changed)}",
         )
+
+
+@app.command("case")
+def case(
+    workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace name or path."),
+    output: Path = typer.Option(None, "--output", "-o", help="Write the case report to this path."),
+    format: str = typer.Option("markdown", "--format", "-f", help="markdown | json"),
+) -> None:
+    """Render a consolidated multi-domain case report across all sessions (v1.0)."""
+    from ..reporting.case_report_writer import build_case_report, render_case_report_markdown
+    from . import _shared
+
+    console = make_console()
+    ws = _shared.resolve_workspace(workspace)
+    report = build_case_report(ws.storage, workspace=workspace)
+
+    if format == "json":
+        body = report.model_dump_json(indent=2)
+    else:
+        body = render_case_report_markdown(report)
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(body, encoding="utf-8")
+        success(console, f"case report written to [accent]{output}[/accent]")
+    else:
+        console.print(body)

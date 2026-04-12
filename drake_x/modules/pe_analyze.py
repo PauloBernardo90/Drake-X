@@ -245,9 +245,7 @@ def run_ai_exploit_assessment(
     regardless of success or failure — auditability must not depend on
     the model answering correctly.
     """
-    import asyncio
-
-    from ..ai.audit import build_record, write_record
+    from ..ai.audited_run import run_audited
     from ..ai.context_builder import build_pe_exploit_context
     from ..ai.ollama_client import OllamaClient
     from ..ai.tasks.exploit_assessment import ExploitAssessmentTask
@@ -262,62 +260,20 @@ def run_ai_exploit_assessment(
     task = ExploitAssessmentTask()
     client = OllamaClient(base_url=ollama_base_url, model=ollama_model)
 
-    # Reproduce the exact prompt that will be sent so the audit log hashes
-    # what the model actually saw.
-    try:
-        prompt = task._build_prompt(built.task_context)  # noqa: SLF001 — audit needs the exact text
-    except Exception as exc:  # noqa: BLE001
-        result.warnings.append(f"AI exploit assessment: prompt build failed: {exc}")
-        if audit_dir is not None:
-            rec = build_record(
-                task=task.name,
-                model=ollama_model,
-                prompt="",
-                context_node_ids=built.context_node_ids,
-                raw_response="",
-                parsed=None,
-                truncation_notes=built.truncation_notes,
-                ok=False,
-                error=f"prompt build failed: {exc}",
-            )
-            write_record(rec, audit_dir)
-        return None
+    log.info("AI exploit assessment: %d context nodes",
+             len(built.context_node_ids))
 
-    log.info("AI exploit assessment: %d context nodes, prompt %d chars",
-             len(built.context_node_ids), len(prompt))
-
-    try:
-        task_result = asyncio.run(task.run(client=client, context=built.task_context))
-    except Exception as exc:  # noqa: BLE001
-        result.warnings.append(f"AI exploit assessment failed: {exc}")
-        task_result = None
-
-    if task_result is None:
-        parsed = None
-        raw = ""
-        ok = False
-        error = "task execution raised"
-    else:
-        parsed = task_result.parsed
-        raw = task_result.raw_text or ""
-        ok = task_result.ok
-        error = task_result.error
-        if not ok and error:
-            result.warnings.append(f"AI exploit assessment degraded: {error}")
-
-    if audit_dir is not None:
-        rec = build_record(
-            task=task.name,
-            model=ollama_model,
-            prompt=prompt,
-            context_node_ids=built.context_node_ids,
-            raw_response=raw,
-            parsed=parsed,
-            truncation_notes=built.truncation_notes,
-            ok=ok,
-            error=error,
-        )
-        write_record(rec, audit_dir)
+    task_result = run_audited(
+        task=task,
+        context=built.task_context,
+        client=client,
+        audit_dir=audit_dir,
+        context_node_ids=built.context_node_ids,
+        truncation_notes=built.truncation_notes,
+    )
+    parsed = task_result.parsed
+    if not task_result.ok and task_result.error:
+        result.warnings.append(f"AI exploit assessment degraded: {task_result.error}")
 
     if parsed is not None:
         # Store on the result and mirror into the graph as a finding node

@@ -90,6 +90,28 @@ CREATE TABLE IF NOT EXISTS evidence_graphs (
     edge_count INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
+
+-- v1.0 additions
+
+CREATE TABLE IF NOT EXISTS validation_plans (
+    session_id TEXT PRIMARY KEY,
+    plan_json TEXT NOT NULL,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    max_attempts INTEGER NOT NULL DEFAULT 3,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+);
 """
 
 
@@ -369,6 +391,96 @@ class WorkspaceStorage:
             return EvidenceGraph.from_dict(data)
         except (json.JSONDecodeError, KeyError):
             return None
+
+    # ----- v1.0: validation plans --------------------------------------
+
+    def save_validation_plan(self, session_id: str, plan: "object") -> None:
+        """Persist a :class:`ValidationPlan` for a session."""
+        plan_json = plan.model_dump_json()
+        item_count = len(getattr(plan, "items", []))
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO validation_plans (session_id, plan_json, item_count)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(session_id) DO UPDATE SET
+                        plan_json=excluded.plan_json,
+                        item_count=excluded.item_count
+                    """,
+                    (session_id, plan_json, item_count),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to persist validation plan: {exc}") from exc
+
+    def load_validation_plan(self, session_id: str):
+        """Load a :class:`ValidationPlan` for a session, or ``None``."""
+        from ..models.validation_plan import ValidationPlan
+
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT plan_json FROM validation_plans WHERE session_id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        try:
+            return ValidationPlan.model_validate_json(row["plan_json"])
+        except Exception:
+            return None
+
+    # ----- v1.0: jobs (experimental execution foundation) --------------
+
+    def enqueue_job(self, job) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO jobs (
+                        id, kind, payload_json, status, attempts, max_attempts,
+                        error, created_at, started_at, finished_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        job.id, job.kind, json.dumps(job.payload, default=str),
+                        job.status, job.attempts, job.max_attempts,
+                        job.error, job.created_at, job.started_at, job.finished_at,
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to enqueue job: {exc}") from exc
+
+    def update_job(self, job) -> None:
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE jobs SET
+                        status=?, attempts=?, error=?,
+                        started_at=?, finished_at=?
+                    WHERE id=?
+                    """,
+                    (
+                        job.status, job.attempts, job.error,
+                        job.started_at, job.finished_at, job.id,
+                    ),
+                )
+        except sqlite3.Error as exc:
+            raise StorageError(f"failed to update job: {exc}") from exc
+
+    def load_jobs(self, *, status: str | None = None, limit: int = 100) -> list[dict]:
+        with self._connect() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM jobs WHERE status = ? ORDER BY created_at ASC LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM jobs ORDER BY created_at ASC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
 
     # ----- internals ---------------------------------------------------
 

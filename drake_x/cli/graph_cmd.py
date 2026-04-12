@@ -90,3 +90,36 @@ def show(
         success(console, f"graph output written to [accent]{output}[/accent]")
     else:
         console.print(body, highlight=False)
+
+
+@app.command("query")
+def query(
+    workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace name or path."),
+    kind: str = typer.Option(None, "--kind", "-k", help="Filter by node kind."),
+    domain: str = typer.Option(None, "--domain", "-d", help="Filter by domain (pe, apk, elf, ...)."),
+    label_contains: str = typer.Option(None, "--label", help="Substring match on label."),
+    data_contains: str = typer.Option(None, "--data", help="Substring match on serialized node data."),
+    min_confidence: float = typer.Option(None, "--min-confidence", help="Minimum node confidence."),
+    format: str = typer.Option("text", "--format", "-f", help="Output format: text or json."),
+) -> None:
+    """Workspace-wide node query across every persisted evidence graph (v1.0)."""
+    from ..correlation import query_nodes
+
+    ws = _shared.resolve_workspace(workspace)
+    rows = query_nodes(
+        ws.storage,
+        kind=kind,
+        domain=domain,
+        label_contains=label_contains,
+        data_contains=data_contains,
+        min_confidence=min_confidence,
+    )
+    if format == "json":
+        print(json.dumps(rows, indent=2, default=str))
+        return
+    console = make_console()
+    info(console, f"matches: [accent]{len(rows)}[/accent]")
+    for row in rows[:50]:
+        info(console, f"  {row['session_id'][:12]}  {row['kind']:<12} {row['label']}")
+    if len(rows) > 50:
+        info(console, f"  ... {len(rows) - 50} more (use --format json)")

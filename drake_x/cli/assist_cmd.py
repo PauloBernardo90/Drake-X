@@ -83,13 +83,22 @@ def start(
         confirm=ConfirmGate(mode=ConfirmMode.INTERACTIVE),
     )
     task = AssistSuggestTask()
+    from ..ai.audited_run import run_audited
 
     for step_num in range(1, max_steps + 1):
         ctx = _build_assist_context(storage, ws, parsed, domain)
         console.print(f"[muted]--- assist step {step_num}/{max_steps} ---[/muted]")
         info(console, "analyzing workspace state...")
 
-        result = asyncio.run(task.run(client=client, context=ctx))
+        audit_dir = ws.runs_dir / assist_id / "ai_audit"
+        result = run_audited(
+            task=task,
+            context=ctx,
+            client=client,
+            audit_dir=audit_dir,
+            context_node_ids=[],
+            truncation_notes=[],
+        )
         ts = isoformat_utc(utcnow()) or ""
 
         if not result.ok or not result.parsed:
@@ -99,6 +108,7 @@ def start(
                 "ai_failed",
             )
             warn(console, f"AI suggestion unavailable: {result.error or 'no response'}")
+            info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
             break
 
         suggestion = result.parsed
@@ -115,6 +125,7 @@ def start(
         if evidence_basis:
             console.print(f"  [muted]Based on:[/muted] {', '.join(str(e)[:60] for e in evidence_basis[:3])}")
         console.print(f"  [muted]Confidence:[/muted] {confidence}")
+        info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
         console.print()
 
         answer = _prompt_user("Proceed? [y/n/q] > ")

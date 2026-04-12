@@ -304,7 +304,10 @@ class Engine:
         if session.ai_enabled and self.ai is not None:
             try:
                 ai_findings, summary = await self.ai.analyze(
-                    target=plan.target, profile=plan.profile, artifacts=artifacts
+                    target=plan.target,
+                    profile=plan.profile,
+                    artifacts=artifacts,
+                    audit_dir=self.workspace.session_dir(session.id) / "ai_audit",
                 )
                 findings.extend(ai_findings)
                 session.ai_summary = summary

@@ -18,10 +18,13 @@ from . import (
     api_cmd,
     apk_cmd,
     assist_cmd,
+    correlate_cmd,
+    elf_cmd,
     findings_cmd,
     flow_cmd,
     frida_cmd,
     graph_cmd,
+    ingest_cmd,
     init_cmd,
     ioc_cmd,
     mission_cmd,
@@ -31,6 +34,7 @@ from . import (
     scope_cmd,
     status_cmd,
     tools_cmd,
+    validate_cmd,
     web_cmd,
 )
 
@@ -75,6 +79,12 @@ app.add_typer(findings_cmd.app, name="findings")
 app.add_typer(ai_cmd.app, name="ai")
 app.add_typer(report_cmd.app, name="report")
 app.add_typer(tools_cmd.app, name="tools")
+
+# v1.0 platform additions
+app.add_typer(correlate_cmd.app, name="correlate")
+app.add_typer(ingest_cmd.app, name="ingest")
+app.add_typer(validate_cmd.app, name="validate")
+app.add_typer(elf_cmd.app, name="elf")
 
 # Console is imported lazily to avoid circular import (console_cmd
 # imports v2.app for command dispatch).

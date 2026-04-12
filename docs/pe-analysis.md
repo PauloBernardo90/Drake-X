@@ -128,7 +128,7 @@ A v0.9 PE run produces, in the work directory:
 **Important:** Bounded disassembly operates on the entry-point region,
 not on individual function boundaries. It captures the initial
 execution path to support analyst triage. Function-scoped disassembly
-is planned for v1.0 and will be driven by the Ghidra-structured export
+remains future work and would be driven by the Ghidra-structured export
 pipeline rather than an expanded Capstone path.
 
 ### Phase 5 — Reporting
@@ -241,8 +241,10 @@ See [`exploit-awareness.md`](exploit-awareness.md) for full details.
 
 - Bounded disassembly covers the entry-point region only, not individual
   functions.
-- No evidence graph node types specific to PE (planned for v1.0).
-- No cross-sample PE correlation (planned for v1.0).
+- No evidence graph node types specific to PE are shipped in v1.0.
+- Workspace-level cross-sample correlation exists in v1.0, but PE still
+  participates through the generic correlation bases rather than
+  PE-specific clustering logic.
 - No debugger integration.
 - `jadx` and `apktool` are not applicable to PE files.
 

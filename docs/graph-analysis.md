@@ -1,89 +1,89 @@
 # Drake-X Graph Analysis
 
-See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
-[`evidence-model.md`](evidence-model.md), [`usage.md`](usage.md)
+See also: [`evidence-model.md`](evidence-model.md),
+[`architecture.md`](architecture.md), [`ai-auditability.md`](ai-auditability.md)
 
-## Overview
+The Evidence Graph is the canonical analysis surface in Drake-X v1.0.
+Graphs are persisted in SQLite per session and then reused for:
 
-Drake-X v0.9 promotes the Evidence Graph from a parallel view to the
-canonical integration bus for PE analysis, with deterministic node IDs
-and `supports`/`derived_from` edges linking indicators back to the
-static evidence that justifies them. Analysts and AI tasks use it to
-explore structured relationships between findings, artifacts,
-indicators, protections, enrichments, and assessments across analysis
-domains. APK-domain graph-first migration is tracked for v1.0.
+- `drake graph show` — session-local inspection
+- `drake graph query` — workspace-wide node query
+- `drake correlate run` — cross-sample evidence correlation
+- AI context building
+- structured validation planning
+- multi-domain case reporting
 
 ## `drake graph show`
 
+Inspect one persisted session graph:
+
 ```bash
-# ASCII view — readable on dark Kali terminals
 drake graph show <session-id> -w my-engagement
-
-# Statistical summary
 drake graph show <session-id> -w my-engagement --format summary
-
-# JSON export
-drake graph show <session-id> -w my-engagement --format json -o graph.json
-
-# Focus on a specific node's neighborhood
-drake graph show <session-id> -w my-engagement --node apk:behavior:0:dropper --depth 2
-
-# Filter by node kind
-drake graph show <session-id> -w my-engagement --findings
-drake graph show <session-id> -w my-engagement --indicators
-drake graph show <session-id> -w my-engagement --kind protection
-
-# Filter by edge type
+drake graph show <session-id> -w my-engagement --format json
+drake graph show <session-id> -w my-engagement --node <node-id> --depth 2
+drake graph show <session-id> -w my-engagement --kind indicator
 drake graph show <session-id> -w my-engagement --edge supports
 ```
 
-## Graph-Aware AI
+This is for analyst navigation inside one session.
 
-When a session has a persisted evidence graph, AI tasks automatically
-receive a serialized graph neighborhood in the prompt alongside the
-flat evidence list. This provides the model with:
+## `drake graph query`
 
-- node-to-node relationships (which finding derived from which artifact)
-- supporting evidence chains (which permission supports which behavior)
-- cross-domain links (when APK, native, IoC, and supporting collection
-  indicators are in the same graph)
+Query nodes across every persisted graph in the workspace:
 
-The graph context is:
-- **Bounded** — limited by max_nodes, max_edges, max_chars
-- **Deterministic** — identical graphs produce identical serializations
-- **Faithful** — only relationships in the graph appear; nothing invented
-- **Fallback-safe** — if no graph exists, AI uses flat evidence (v0.3 behavior)
+```bash
+drake graph query -w my-engagement --kind indicator --domain pe
+drake graph query -w my-engagement --label VirtualAllocEx
+drake graph query -w my-engagement --data evil.example --format json
+drake graph query -w my-engagement --min-confidence 0.7
+```
 
-## How Graphs Are Built
+Filters are deterministic and additive:
 
-### Supporting Collection Sessions
+- `--kind`
+- `--domain`
+- `--label`
+- `--data`
+- `--min-confidence`
 
-The engine automatically builds an evidence graph after each supporting
-collection run:
-- Root node: the session target
-- Artifact nodes: one per tool output (curl, nmap, dig, etc.)
-- Finding nodes: one per finding (HSTS missing, CSP missing, etc.)
-- Edges: `derived_from` (artifact→target), `supports` (artifact→finding),
-  `related_to` (finding→target), `duplicate_of` (from dedupe tags)
+Output is ordered by session, then node ID.
 
-### APK / Malware Analysis
+## How Graphs Enter the Store
 
-`drake apk analyze` builds a richer graph:
-- Root: the APK sample
-- Permissions, behaviors, indicators, obfuscation traits, protections,
-  campaigns, external enrichments, and dynamic-validation targets as
-  separate node kinds
-- Cross-category `supports` edges linking permissions to exfiltration
-  findings, network IOCs to communication behaviors, behaviors to campaigns
+Persisted graph-producing workflows in v1.0:
 
-## Design Principles
+- `drake pe analyze`
+- `drake apk analyze`
+- `drake elf analyze`
+- supporting collection sessions
+- `drake ingest evidence`
 
-- **Evidence over assumptions.** Every edge is derived from a tool
-  output or parser result. No edges are speculatively created.
-- **Human-in-the-loop.** The graph is a navigational aid, not an
-  autonomous decision maker. The analyst uses `drake graph show` to
-  explore and validate.
-- **Reproducibility.** Graphs are persisted in SQLite per-session and
-  deterministically ordered. Copy the workspace, get the same graph.
-- **Local-first.** All graph construction, querying, and rendering
-  happens locally. No external services involved.
+Imported evidence enters with `domain="external"` and mandatory
+provenance under `node.data["provenance"]`.
+
+## Design Properties
+
+- **Deterministic IDs where applicable.** Drake-generated node IDs are
+  stable across re-runs for identical evidence.
+- **Bounded AI serialization.** Graph-to-prompt context is capped by
+  nodes, edges, and characters.
+- **Faithful provenance.** Edges represent observed derivation or
+  support only.
+- **Queryable at workspace scope.** Graphs are not just exports; they
+  are persisted platform state.
+
+## What v1.0 Correlation Uses
+
+Cross-sample correlation currently derives workspace-level links from
+persisted graph evidence. Supported bases:
+
+- shared imports
+- shared shellcode prefixes
+- shared indicator clusters
+- shared protection profiles
+- shared IOC values
+
+The output is observational. Shared graph evidence is surfaced with the
+exact node IDs on both sides; Drake-X does not claim common authorship
+or campaign ownership from correlation alone.

@@ -11,6 +11,7 @@ return an empty list and let the caller continue without AI input.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from ..exceptions import AIUnavailableError
@@ -18,6 +19,7 @@ from ..logging import get_logger
 from ..models.artifact import Artifact
 from ..models.finding import Finding, FindingSeverity, FindingSource
 from ..models.target import Target
+from .audit import build_record, write_record
 from .ollama_client import OllamaClient
 from .prompts import ANALYST_SYSTEM_PROMPT, build_analyst_prompt
 
@@ -41,6 +43,7 @@ class AIAnalyzer:
         target: Target,
         profile: str,
         artifacts: list[Artifact],
+        audit_dir: Path | None = None,
     ) -> tuple[list[Finding], str | None]:
         if not artifacts:
             log.debug("AIAnalyzer.analyze: no artifacts to analyze")
@@ -56,18 +59,78 @@ class AIAnalyzer:
         try:
             raw = await self.client.generate(prompt, system=ANALYST_SYSTEM_PROMPT)
         except AIUnavailableError:
+            if audit_dir is not None:
+                write_record(
+                    build_record(
+                        task="analyst_analyzer",
+                        model=self.client.model,
+                        prompt=prompt,
+                        context_node_ids=[],
+                        raw_response="",
+                        parsed=None,
+                        truncation_notes=[],
+                        ok=False,
+                        error="AIUnavailableError",
+                    ),
+                    audit_dir,
+                )
             raise
 
         if not raw:
+            if audit_dir is not None:
+                write_record(
+                    build_record(
+                        task="analyst_analyzer",
+                        model=self.client.model,
+                        prompt=prompt,
+                        context_node_ids=[],
+                        raw_response="",
+                        parsed=None,
+                        truncation_notes=[],
+                        ok=False,
+                        error="empty response",
+                    ),
+                    audit_dir,
+                )
             return [], None
 
         parsed = _safe_json_extract(raw)
         if parsed is None:
             log.warning("AI response was not valid JSON; ignoring")
+            if audit_dir is not None:
+                write_record(
+                    build_record(
+                        task="analyst_analyzer",
+                        model=self.client.model,
+                        prompt=prompt,
+                        context_node_ids=[],
+                        raw_response=raw,
+                        parsed=None,
+                        truncation_notes=[],
+                        ok=False,
+                        error="response was not valid JSON",
+                    ),
+                    audit_dir,
+                )
             return [], None
 
         summary = parsed.get("executive_summary")
         findings = _parsed_to_findings(parsed)
+        if audit_dir is not None:
+            write_record(
+                build_record(
+                    task="analyst_analyzer",
+                    model=self.client.model,
+                    prompt=prompt,
+                    context_node_ids=[],
+                    raw_response=raw,
+                    parsed=parsed,
+                    truncation_notes=[],
+                    ok=True,
+                    error=None,
+                ),
+                audit_dir,
+            )
         return findings, summary if isinstance(summary, str) else None
 
 

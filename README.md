@@ -34,11 +34,21 @@ The code and the AI prompts both enforce this boundary.
 
 ## Current Platform Status
 
-Drake-X v0.9 adds the exploit-awareness layer on top of v0.8 native
-foundations. PE analysis now detects exploit-related indicators, carves
-suspected shellcode artifacts, performs bounded decoding for triage,
-assesses protection-interaction, maps findings to ATT&CK, and supports
+Drake-X v1.0 turns the platform from a strong per-sample analysis tool
+into a workspace-level evidence platform. Evidence graphs are persisted
+in SQLite, queryable across the workspace, and used for cross-sample
+correlation, structured validation planning, case-level reporting, and
+platform-wide AI auditability.
+
+The v0.9 PE exploit-awareness layer remains intact in v1.0: PE analysis
+still detects exploit-related indicators, carves suspected shellcode
+artifacts, performs bounded decoding for triage, assesses
+protection-interaction, maps findings to ATT&CK, and supports
 AI-assisted exploit-aware assessment with strict evidence citation.
+
+v1.0 adds first-class ELF analysis, external evidence ingestion with
+mandatory provenance, global graph query, consolidated case reporting,
+and a minimal experimental jobs/queue/worker foundation.
 
 The center of gravity is malware analysis, native inspection,
 intelligence correlation, and analyst-assisted validation. Recon and web
@@ -72,13 +82,31 @@ domains rather than the primary product identity.
 `audit.log`.
 
 **Evidence model.** Structured findings, indicators, protections,
-campaign-similarity assessments, external intelligence enrichments, and
-dynamic-validation hypotheses all converge into a shared evidence graph.
+campaign-similarity assessments, imported external evidence, and
+dynamic-validation hypotheses converge into a shared evidence graph
+persisted in SQLite.
 
-**Malware analysis workflows.** APK analysis, Windows PE static analysis
-(v0.9), native binary inspection, VirusTotal correlation, Frida
-observation templates, Ghidra-backed deeper analysis, and evidence-linked
-reporting for analyst review.
+**Malware analysis workflows.** APK analysis, Windows PE static analysis,
+ELF/native binary analysis (v1.0 first-class workflow), native binary
+inspection, VirusTotal correlation, Frida observation templates,
+Ghidra-backed deeper analysis, and evidence-linked reporting for
+analyst review.
+
+**Cross-sample platform capabilities (v1.0).** The Evidence Graph
+persists to SQLite and is queryable workspace-wide. Operators can
+correlate samples by shared indicators, imports, shellcode prefixes,
+and IOC values (`drake correlate run -w …`); run a global node
+query across every persisted graph (`drake graph query -w …`);
+ingest external evidence with preserved provenance
+(`drake ingest evidence …`); generate structured multi-domain
+validation plans (`drake validate plan …`); and produce a
+consolidated case report spanning PE, APK, ELF, and imported
+evidence (`drake report case -w …`). Every AI task — not just PE
+exploit assessment — runs through the shared auditable execution
+path and writes a record to the workspace's `ai_audit/` directory.
+A minimal SQLite-backed job/queue/worker foundation
+(`drake_x.execution`) is in place and marked experimental; it is
+the seam for future queue + worker deployments.
 
 **PE analysis (v0.9).** `drake pe analyze sample.exe` parses PE headers,
 sections, imports, exports, and resources. Assesses protection status
@@ -157,10 +185,11 @@ backrefs, fact vs inference flag, remediation placeholders, operator tags.
 `dedupe`. All tasks run against stored artifacts — they never invoke
 tools.
 
-**Reporting.** Five output formats: technical Markdown, executive
-Markdown, JSON, scan manifest, evidence index. Report sections preserve
-fact vs inference vs external intel vs dynamic hypothesis. Session-to-
-session diff supports trend analysis over time.
+**Reporting.** Five per-session output formats remain available:
+technical Markdown, executive Markdown, JSON, scan manifest, and
+evidence index. v1.0 also adds `drake report case` for a consolidated
+multi-domain case report spanning persisted sessions, correlations, and
+validation plans.
 
 **API inventory.** Parses operator-supplied OpenAPI/Swagger specs into
 structured endpoint inventories without making network calls. Useful as
@@ -174,10 +203,11 @@ deeper analysis, and a structured technical report. See
 [`docs/apk-analysis.md`](docs/apk-analysis.md).
 
 **Evidence Graph.** Structured relationships between findings, artifacts,
-indicators, and assessments. Nodes carry domain (web, apk), kind, and
-provenance. Edges encode derived_from, supports, related_to, and
-duplicate_of relationships. Persisted per-session, queryable via
-`drake graph show`, and consumed by AI tasks for graph-aware reasoning.
+indicators, and assessments. Nodes carry domain, kind, and provenance.
+Edges encode derived_from, supports, related_to, and duplicate_of
+relationships. Graphs are persisted in SQLite per session, queryable via
+`drake graph show` and `drake graph query`, and consumed by AI tasks for
+graph-aware reasoning.
 See [`docs/evidence-model.md`](docs/evidence-model.md).
 
 **Auditability.** Every plan, run, denial, confirmation, and completion
@@ -250,6 +280,22 @@ drake apk analyze sample.apk -o ./apk-output --vt --ghidra
 # Malware analysis of a Windows PE sample
 drake pe analyze sample.exe -w my-engagement --vt
 
+# Malware analysis of an ELF/native sample
+drake elf analyze sample.elf -w my-engagement
+
+# Correlate sessions across the workspace
+drake correlate run -w my-engagement
+
+# Query persisted graph nodes across the workspace
+drake graph query -w my-engagement --kind indicator --domain pe
+
+# Ingest external evidence with mandatory provenance
+drake ingest evidence ./sandbox.json -w my-engagement --type json
+
+# Build and export a validation plan
+drake validate plan <session-id> -w my-engagement
+drake validate export <session-id> -w my-engagement -o validation_plan.md
+
 # Enter the persistent investigation console
 drake console
 
@@ -258,6 +304,7 @@ drake report generate <session-id> -f md        -w my-engagement
 drake report generate <session-id> -f json      -w my-engagement
 drake report generate <session-id> -f executive -w my-engagement
 drake report generate <session-id> -f manifest  -w my-engagement
+drake report case -w my-engagement -o case_report.md
 
 # Compare two sessions
 drake report diff <session-a> <session-b> -w my-engagement

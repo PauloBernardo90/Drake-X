@@ -1,6 +1,6 @@
-# Detection Outputs (v0.9)
+# Detection Outputs
 
-Drake-X v0.9 can emit candidate detection artifacts from PE analysis:
+Drake-X emits candidate detection artifacts from PE analysis:
 
 - YARA rules (`pe_candidates.yar`)
 - STIX 2.1 bundle (`pe_stix.json`)
@@ -73,7 +73,7 @@ the sentinel.
 
 ## What is intentionally not generated
 
-- Sigma rules are not emitted in v0.9. The writer interface is
+- Sigma rules are not emitted in v1.0. The writer interface is
   designed to be symmetric with YARA/STIX; a Sigma writer is a
   straightforward addition once a clean source mapping is agreed.
 - No network-based IoCs are emitted from PE analysis alone. That

@@ -137,7 +137,11 @@ class Orchestrator:
         findings: list[Finding] = []
         if session.ai_enabled and self.ai is not None:
             try:
-                ai_findings, summary = await self.ai.analyze(target=target, profile=profile, artifacts=artifacts)
+                ai_findings, summary = await self.ai.analyze(
+                    target=target,
+                    profile=profile,
+                    artifacts=artifacts,
+                )
                 findings.extend(ai_findings)
                 session.ai_summary = summary
                 for f in ai_findings:

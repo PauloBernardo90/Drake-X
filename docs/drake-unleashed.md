@@ -366,16 +366,21 @@ All optional tooling must degrade gracefully when unavailable.
 Current status:
 
 - v0.8 native foundations are in place
-- PE analysis is a first-class v0.9 workflow
+- PE analysis remains a first-class workflow with v0.9 exploit-awareness
 - bounded exploit-awareness is implemented for PE analysis
 - PE analysis writes the Evidence Graph as a canonical output
 - optional AI-assisted exploit-aware assessment is available with audit logging
 - optional candidate YARA and STIX outputs are available for analyst review
+- external evidence ingestion is available through adapter-backed CLI entry points
+- structured validation plans persist in SQLite
+- ELF analysis is a first-class workflow
+- cross-sample correlation and global graph query are available workspace-wide
+- multi-domain case reporting is available
 - persistent console is available
 
 Next phase:
 
-- v1.0 cross-sample correlation
-- richer graph query surfaces
-- dynamic evidence-ingestion adapters
-- broader multi-domain reporting and validation planning
+- additional ingest adapters beyond JSON
+- deeper ELF/native analysis coverage
+- remote execution backends behind the queue/worker abstraction
+- broader correlation heuristics and clustering depth

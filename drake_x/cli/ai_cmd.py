@@ -79,6 +79,14 @@ def status(
 
 
 def _run_task(task_cls, *, session_id: str, workspace: str | None, label: str) -> None:
+    """Run *task_cls* through the shared audited execution path (v1.0).
+
+    Every generic ``drake ai`` invocation now writes an audit record to
+    the workspace's ``ai_audit/<task>.jsonl`` so the AI layer is
+    auditable platform-wide, not just on the PE path.
+    """
+    from ..ai.audited_run import run_audited
+
     console = make_console()
     ws = _shared.resolve_workspace(workspace)
     storage = WorkspaceStorage(ws.db_path)
@@ -89,11 +97,22 @@ def _run_task(task_cls, *, session_id: str, workspace: str | None, label: str) -
     info(console, f"running {label} task on session [accent]{session_id}[/accent]")
     client = _build_client(ws)
     task = task_cls()
-    result = asyncio.run(task.run(client=client, context=ctx))
+    audit_dir = ws.runs_dir / f"ai-{session_id}" / "ai_audit"
+    # Generic tasks do not use graph retrieval; the flat evidence list
+    # is passed through TaskContext.evidence. We surface no context
+    # node IDs but still audit prompt, response, model, timestamps.
+    result = run_audited(
+        task=task, context=ctx, client=client,
+        audit_dir=audit_dir,
+        context_node_ids=[],
+        truncation_notes=[],
+    )
     if not result.ok:
         warn(console, f"{label} task failed: {result.error}")
+        info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
         raise typer.Exit(code=1)
     _print_result(console, label, result.parsed, result.raw_text)
+    info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
 
 
 @app.command("summarize")
@@ -183,16 +202,28 @@ def dedupe(
         f"running dedupe task on session [accent]{session_id}[/accent] "
         f"({len(findings)} finding(s))",
     )
+    from ..ai.audited_run import run_audited
+
     client = _build_client(ws)
     task = DedupeTask()
-    result = asyncio.run(task.run(client=client, context=ctx))
+    audit_dir = ws.runs_dir / f"ai-{session_id}" / "ai_audit"
+    result = run_audited(
+        task=task,
+        context=ctx,
+        client=client,
+        audit_dir=audit_dir,
+        context_node_ids=[],
+        truncation_notes=[],
+    )
 
     if not result.ok:
         warn(console, f"dedupe task failed: {result.error}")
+        info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
         raise typer.Exit(code=1)
 
     success(console, "dedupe groups:")
     console.print(json.dumps(result.parsed, indent=2))
+    info(console, f"audit log: [accent]{audit_dir}/{task.name}.jsonl[/accent]")
 
     groups = (result.parsed or {}).get("groups") or []
     if not groups:

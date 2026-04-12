@@ -1,135 +1,114 @@
 # Drake-X Evidence Model
 
-See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
-[`graph-analysis.md`](graph-analysis.md), [`architecture.md`](architecture.md)
+See also: [`graph-analysis.md`](graph-analysis.md),
+[`ingestion.md`](ingestion.md), [`validation-plan.md`](validation-plan.md)
 
-## Overview
+Drake-X v1.0 uses the Evidence Graph as the shared data model across
+domain analysis, imported evidence, AI context building, validation
+planning, and case reporting.
 
-Drake-X v0.4 introduces the **Evidence Graph** — a structured
-representation of relationships between findings, artifacts, indicators,
-and assessments produced during an analysis session.
+## Core Node Kinds
 
-The graph enables:
-
-- **Cross-domain correlation** — linking APK behavior indicators to
-  network IOCs to campaign assessments in one traversable structure.
-- **Provenance tracing** — following a finding back through every
-  artifact and tool result that contributed to it.
-- **AI reasoning context** — providing the local LLM with structured
-  relationships rather than flat lists.
-- **Analyst navigation** — answering "what evidence supports this
-  conclusion?" without reading the full report.
-
-## Node types
-
-| Kind | Description | Example |
-|------|-------------|---------|
-| `artifact` | A raw tool output or ingested file | The APK sample, a session's curl result |
-| `finding` | A detected behavior or pattern | "DexClassLoader usage", "missing HSTS" |
-| `indicator` | A network IOC or observable | URL, IP address, domain |
-| `evidence` | A supporting fact (permission, trait) | "READ_SMS permission", "identifier renaming" |
-| `protection` | An anti-analysis protection | "root detection observed" |
-| `campaign` | A campaign similarity assessment | "consistent with dropper" |
+| Kind | Meaning |
+|------|---------|
+| `artifact` | a sample, file, carved blob, or ingest run root |
+| `finding` | a surfaced analytic or rule-based conclusion |
+| `indicator` | an observable such as URL, domain, or exploit signal |
+| `evidence` | supporting structured fact such as import, section, permission |
+| `protection` | mitigation or anti-analysis state |
+| `campaign` | similarity/campaign-style assessment |
 
 Every node carries:
-- `node_id` — unique, prefixed by domain (e.g. `apk:behavior:0:dropper`)
-- `kind` — one of the types above
-- `domain` — the analysis domain (`apk`, `web`, `recon`, `api`)
-- `label` — human-readable short name
-- `data` — arbitrary structured metadata
 
-## Edge types
+- `node_id`
+- `kind`
+- `domain`
+- `label`
+- `data`
 
-| Type | Meaning | Example |
-|------|---------|---------|
-| `derived_from` | B was extracted from A | Behavior → Sample |
-| `supports` | A provides evidence for B | Permission → Exfiltration finding |
-| `related_to` | A and B are related | Campaign → Sample |
-| `duplicate_of` | A is a duplicate of B | Finding A = Finding B |
-| `contradicts` | A and B conflict | (reserved for future use) |
+## Edge Types
 
-Every edge carries:
-- `source_id` / `target_id` — node references
-- `edge_type` — one of the types above
-- `confidence` — 0.0 to 1.0
-- `notes` — optional free text
+| Type | Meaning |
+|------|---------|
+| `derived_from` | node was derived from another entity |
+| `supports` | node provides evidence for another node |
+| `related_to` | two nodes are related but not in a strict derivation chain |
+| `duplicate_of` | deduplicated semantic duplicate |
+| `contradicts` | explicit conflict |
 
-## How the graph is built
+## Domains
 
-### APK domain
+The current graph spans:
 
-The `build_apk_evidence_graph()` function in
-`drake_x/normalize/apk/graph_builder.py` takes an `ApkAnalysisResult`
-and produces a graph with:
+- `pe`
+- `apk`
+- `elf`
+- `external`
+- supporting collection domains such as `web`, `recon`, `api`
 
-- One root `artifact` node for the sample
-- `evidence` nodes for each permission
-- `finding` nodes for each behavior indicator
-- `indicator` nodes for each network IOC
-- `evidence` nodes for obfuscation traits
-- `protection` nodes for observed protections
-- `campaign` nodes for matching campaign assessments
-- `derived_from` edges linking everything to the root
-- `supports` edges linking permissions to exfiltration findings,
-  network IOCs to communication behaviors, behaviors to campaigns
-
-### Web domain (future)
-
-The existing `Finding` model already carries `evidence` backrefs.
-A future `build_web_evidence_graph()` will convert web sessions into
-the same graph format for unified cross-domain reasoning.
+This allows case-level aggregation without inventing a second evidence
+store.
 
 ## Persistence
 
-The graph is stored in the `evidence_graphs` SQLite table:
+Each session graph is stored in SQLite:
 
 ```sql
-CREATE TABLE IF NOT EXISTS evidence_graphs (
-    session_id TEXT PRIMARY KEY,
-    graph_json TEXT NOT NULL,
-    node_count INTEGER NOT NULL,
-    edge_count INTEGER NOT NULL
+CREATE TABLE evidence_graphs (
+  session_id TEXT PRIMARY KEY,
+  graph_json TEXT NOT NULL,
+  node_count INTEGER NOT NULL,
+  edge_count INTEGER NOT NULL
 );
 ```
 
-Save and load via `WorkspaceStorage`:
+Primary access path:
 
 ```python
-storage.save_evidence_graph(session.id, graph)
-graph = storage.load_evidence_graph(session.id)
+storage.save_evidence_graph(session_id, graph)
+graph = storage.load_evidence_graph(session_id)
 ```
 
-The graph is also written as `evidence_graph.json` in the session's
-output directory for offline inspection.
+## External Evidence
 
-## Serialization
+Imported evidence is first-class, but never conflated with Drake-
+generated evidence. External records are normalized into graph nodes
+with:
 
-```python
-graph.to_json(indent=2)      # JSON string
-graph.to_dict()               # dict for embedding in reports
-EvidenceGraph.from_dict(data) # reconstruct from dict
-```
+- `domain = "external"`
+- `external = true`
+- provenance block under `data["provenance"]`
 
-## Querying
+Provenance includes:
 
-```python
-graph.get_node("apk:behavior:0:dropper")
-graph.edges_from("apk:behavior:0:dropper")
-graph.edges_to("apk:sample:abcd1234")
-graph.neighbors("apk:sample:abcd1234")
-graph.subgraph("apk")
-graph.nodes_by_kind(NodeKind.FINDING)
-graph.stats()
-```
+- source tool
+- source file
+- adapter
+- trust level
+- ingestion timestamp
+- notes
 
-## Design Principles
+## Evidence vs Inference
 
-- **Evidence over assumptions.** Every edge must be justified by a
-  tool output or parser result. No edges are created speculatively.
-- **Domain isolation.** Each domain prefixes its node IDs. A unified
-  graph can merge multiple domain subgraphs without collisions.
-- **Append-only.** Nodes and edges are added during analysis but never
-  removed. The graph is a complete record of everything the analysis
-  observed.
-- **Serializable.** The graph round-trips through JSON for storage,
-  export, and cross-host reproducibility.
+The graph may carry both deterministic evidence and analytical outputs.
+Downstream consumers must preserve that distinction:
+
+- parser/tool outputs are evidence
+- heuristic/analytic outputs are assessments
+- AI outputs are inference
+- imported outputs remain external evidence until validated
+
+This distinction is surfaced in report writers and validation planning.
+
+## Validation Plans
+
+Validation plans are not a parallel evidence model. They are a derived
+view over persisted graph state. Each `ValidationItem` stores the node
+IDs that justify the hypothesis so analysts can trace directly from a
+plan entry back to graph evidence.
+
+## Correlation
+
+Workspace-level correlation is also a derived view over the persisted
+graph store. Correlation output records the exact source and target node
+IDs that matched; it never creates hidden evidence.
