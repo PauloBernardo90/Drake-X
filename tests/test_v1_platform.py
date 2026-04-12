@@ -170,6 +170,41 @@ def test_correlation_excludes_external_nodes_by_default(tmp_path):
     assert report.correlations == []
 
 
+def test_correlation_suppresses_universal_loader_imports(tmp_path):
+    ws = _workspace(tmp_path)
+    for sid, sha in [("sess-a", "a" * 64), ("sess-b", "b" * 64), ("sess-c", "c" * 64)]:
+        g = EvidenceGraph()
+        root = f"pe:{sha[:16]}:artifact"
+        g.add_node(EvidenceNode(node_id=root, kind=NodeKind.ARTIFACT, domain="pe",
+                                 label="pe sample", data={"sha256": sha}))
+        for func in ("GetProcAddress", "LoadLibraryA"):
+            imp = f"pe:{sha[:16]}:import:kernel32.dll:{func}"
+            g.add_node(EvidenceNode(
+                node_id=imp,
+                kind=NodeKind.EVIDENCE,
+                domain="pe",
+                label=f"import kernel32.dll!{func}",
+                data={"dll": "kernel32.dll", "function": func},
+            ))
+            g.add_edge(EvidenceEdge(source_id=imp, target_id=root, edge_type=EdgeType.DERIVED_FROM))
+        _seed_session_with_graph(ws, sid, g)
+
+    report = correlate_samples(ws.storage, min_shared=1)
+    assert report.correlations == []
+
+
+def test_correlation_idf_downweights_common_shared_values(tmp_path):
+    ws = _workspace(tmp_path)
+    _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
+    _seed_session_with_graph(ws, "sess-b", _pe_like_graph(sha="b" * 64))
+    sparse_score = correlate_samples(ws.storage, min_shared=1).correlations[0].score
+
+    _seed_session_with_graph(ws, "sess-c", _pe_like_graph(sha="c" * 64))
+    _seed_session_with_graph(ws, "sess-d", _pe_like_graph(sha="d" * 64))
+    dense_score = correlate_samples(ws.storage, min_shared=1).correlations[0].score
+    assert dense_score < sparse_score
+
+
 # ---------------------------------------------------------------------------
 # Phase 2 — external evidence ingestion
 # ---------------------------------------------------------------------------
@@ -204,7 +239,9 @@ def test_ingest_preserves_provenance_on_every_record(tmp_path):
             prov = node.data["provenance"]
             assert prov["source_tool"] == "acme-sandbox"
             assert prov["adapter"] == "json"
-            assert prov["trust"] == "medium"
+            assert prov["requested_trust"] == "medium"
+            assert prov["trust"] == "low"
+            assert prov["attested"] is False
 
 
 def test_ingest_rejects_unknown_kinds_silently(tmp_path):
@@ -256,6 +293,42 @@ def test_ingest_refuses_merge_into_analysis_without_explicit_flag(tmp_path):
         )
 
 
+def test_ingest_merge_into_analysis_blocked_by_release_policy_default(tmp_path):
+    ws = _workspace(tmp_path)
+    _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
+    payload = [{"kind": "finding", "label": "hostile", "data": {}}]
+    p = tmp_path / "hostile.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="disabled by workspace ingest policy"):
+        ingest_file(
+            file=p,
+            adapter_name="json",
+            storage=ws.storage,
+            session_id="sess-a",
+            allow_merge_into_analysis=True,
+        )
+
+
+def test_ingest_merge_into_analysis_requires_workspace_opt_in(tmp_path):
+    ws = _workspace(tmp_path)
+    ws.config.allow_ingest_merge_into_analysis = True
+    ws.save_config()
+    _seed_session_with_graph(ws, "sess-a", _pe_like_graph())
+    payload = [{"kind": "finding", "label": "hostile", "data": {}}]
+    p = tmp_path / "hostile.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = ingest_file(
+        file=p,
+        adapter_name="json",
+        storage=ws.storage,
+        session_id="sess-a",
+        allow_merge_into_analysis=True,
+    )
+    assert result.session_id == "sess-a"
+
+
 def test_ingest_dedupes_edges_on_repeat_merge(tmp_path):
     ws = _workspace(tmp_path)
     payload = [{"kind": "finding", "label": "ok", "data": {}}]
@@ -291,6 +364,54 @@ def test_ingest_graph_payload_is_deterministic_across_reingest(tmp_path):
     assert graph_b is not None
     second = graph_b.to_json(indent=2)
     assert first == second
+
+
+def test_workspace_ingest_producer_registry_roundtrips(tmp_path):
+    from drake_x.core.workspace import Workspace
+
+    ws = Workspace.init("registry-ws", root=tmp_path)
+    ws.register_ingest_producer("sandbox-prod", "high")
+    reloaded = Workspace.load(str(ws.root))
+    assert reloaded.config.ingest_producers["sandbox-prod"] == "high"
+
+
+def test_ingest_high_requires_attested_high_producer(tmp_path):
+    ws = _workspace(tmp_path)
+    payload = {"source_tool": "sandbox-prod", "records": [{"kind": "finding", "label": "x", "data": {}}]}
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="trust=high requires"):
+        ingest_file(file=p, adapter_name="json", storage=ws.storage, trust="high")
+
+
+def test_ingest_registered_high_producer_retains_high_trust(tmp_path):
+    ws = _workspace(tmp_path)
+    ws.register_ingest_producer("sandbox-prod", "high")
+    payload = {"source_tool": "sandbox-prod", "records": [{"kind": "finding", "label": "x", "data": {}}]}
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    result = ingest_file(file=p, adapter_name="json", storage=ws.storage, trust="high")
+    graph = ws.storage.load_evidence_graph(result.session_id)
+    assert graph is not None
+    ext = next(node for node in graph.nodes if node.node_id.startswith("ext:"))
+    prov = ext.data["provenance"]
+    assert prov["trust"] == "high"
+    assert prov["requested_trust"] == "high"
+    assert prov["attested"] is True
+    assert prov["registry_trust"] == "high"
+
+
+def test_ingest_registered_medium_caps_requested_high(tmp_path):
+    ws = _workspace(tmp_path)
+    ws.register_ingest_producer("sandbox-prod", "medium")
+    payload = {"source_tool": "sandbox-prod", "records": [{"kind": "finding", "label": "x", "data": {}}]}
+    p = tmp_path / "ingest.json"
+    p.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="trust=high requires"):
+        ingest_file(file=p, adapter_name="json", storage=ws.storage, trust="high")
 
 
 # ---------------------------------------------------------------------------

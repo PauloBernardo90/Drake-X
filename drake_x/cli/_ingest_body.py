@@ -26,7 +26,8 @@ def register(app: typer.Typer) -> None:
         ),
         merge_into_analysis: bool = typer.Option(
             False, "--merge-into-analysis",
-            help="Required with --session when merging external evidence into a non-ingest session.",
+            help="Required with --session when merging external evidence into a non-ingest session. "
+                 "Also requires workspace policy opt-in.",
         ),
         trust: str = typer.Option(
             "medium", "--trust",
@@ -66,3 +67,48 @@ def register(app: typer.Typer) -> None:
         console = make_console()
         for name in sorted(adapter_registry()):
             info(console, f"  · {name}")
+
+    @app.command("register-producer")
+    def register_producer(
+        source_tool: str = typer.Argument(..., help="Producer identifier used in provenance.source_tool."),
+        workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace."),
+        trust: str = typer.Option(
+            "medium", "--trust",
+            help="Maximum attested trust for this producer: low | medium | high.",
+        ),
+    ) -> None:
+        """Register an external producer and its attested trust level."""
+        console = make_console()
+        normalized = str(trust).lower()
+        if normalized not in {"low", "medium", "high"}:
+            error(console, "trust must be one of: low, medium, high")
+            raise typer.Exit(code=2)
+        ws = _shared.resolve_workspace(workspace)
+        ws.register_ingest_producer(source_tool, normalized)
+        success(console, f"registered producer [accent]{source_tool}[/accent] at trust={normalized}")
+
+    @app.command("unregister-producer")
+    def unregister_producer(
+        source_tool: str = typer.Argument(..., help="Producer identifier used in provenance.source_tool."),
+        workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace."),
+    ) -> None:
+        """Remove an attested external producer from the workspace registry."""
+        console = make_console()
+        ws = _shared.resolve_workspace(workspace)
+        if ws.unregister_ingest_producer(source_tool):
+            success(console, f"removed producer [accent]{source_tool}[/accent]")
+            return
+        warn(console, f"producer not registered: {source_tool}")
+
+    @app.command("list-producers")
+    def list_producers(
+        workspace: str = typer.Option(..., "--workspace", "-w", help="Workspace."),
+    ) -> None:
+        """List attested external producers for this workspace."""
+        console = make_console()
+        ws = _shared.resolve_workspace(workspace)
+        if not ws.config.ingest_producers:
+            warn(console, "no attested external producers registered")
+            return
+        for source_tool in sorted(ws.config.ingest_producers.keys()):
+            info(console, f"  · {source_tool} (trust={ws.config.ingest_producers[source_tool]})")

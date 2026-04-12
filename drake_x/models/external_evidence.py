@@ -29,6 +29,9 @@ class ExternalProvenance(BaseModel):
     )
     adapter: str = Field(description="Drake-X adapter name that produced the record.")
     trust: TrustLevel = "medium"
+    requested_trust: TrustLevel = "medium"
+    attested: bool = False
+    registry_trust: TrustLevel | None = None
     notes: str = ""
 
 

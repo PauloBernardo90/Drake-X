@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from ...core.workspace import WORKSPACE_FILE, load_workspace_config_file
 from ...graph.pe_writer import dedupe_graph
 from ...models.evidence_graph import (
     EdgeType,
@@ -42,6 +43,74 @@ from .base import BaseIngestAdapter, adapter_registry  # noqa: F401  (re-export)
 
 # Import concrete adapters so they self-register.
 from . import json_adapter  # noqa: F401
+
+_TRUST_RANK = {"low": 0, "medium": 1, "high": 2}
+
+
+def _normalize_trust(value: str | None) -> str:
+    val = str(value or "medium").lower()
+    return val if val in _TRUST_RANK else "medium"
+
+
+def _load_producer_registry(storage) -> dict[str, str]:
+    cfg_path = Path(storage.db_path).parent / WORKSPACE_FILE
+    if not cfg_path.exists():
+        return {}
+    cfg = load_workspace_config_file(cfg_path)
+    return {
+        str(source_tool): _normalize_trust(trust)
+        for source_tool, trust in cfg.ingest_producers.items()
+    }
+
+
+def _allow_merge_into_analysis(storage) -> bool:
+    cfg_path = Path(storage.db_path).parent / WORKSPACE_FILE
+    if not cfg_path.exists():
+        return False
+    cfg = load_workspace_config_file(cfg_path)
+    return bool(cfg.allow_ingest_merge_into_analysis)
+
+
+def _attest_records(
+    records: list[ExternalEvidenceRecord],
+    *,
+    requested_trust: str,
+    producer_registry: dict[str, str],
+    warnings: list[str],
+) -> list[ExternalEvidenceRecord]:
+    requested = _normalize_trust(requested_trust)
+    out: list[ExternalEvidenceRecord] = []
+    warned_downgrades: set[str] = set()
+
+    for rec in records:
+        source_tool = rec.provenance.source_tool or "unknown"
+        registered = producer_registry.get(source_tool)
+        if requested == "high" and registered != "high":
+            raise ValueError(
+                f"trust=high requires a producer registered at high trust "
+                f"(source_tool={source_tool!r})"
+            )
+        effective = "low"
+        if registered is not None:
+            effective = min(
+                requested,
+                registered,
+                key=lambda level: _TRUST_RANK[level],
+            )
+        if effective != requested and source_tool not in warned_downgrades:
+            warnings.append(
+                f"producer {source_tool!r} not attested for requested trust "
+                f"{requested}; effective trust downgraded to {effective}"
+            )
+            warned_downgrades.add(source_tool)
+        prov = rec.provenance.model_copy(update={
+            "trust": effective,
+            "requested_trust": requested,
+            "attested": registered is not None,
+            "registry_trust": registered,
+        })
+        out.append(rec.model_copy(update={"provenance": prov}))
+    return out
 
 
 def ingest_file(
@@ -66,10 +135,13 @@ def ingest_file(
 
     records = adapter.parse(Path(file), trust=trust)
     warnings: list[str] = []
-    if trust == "high":
-        warnings.append(
-            "external trust is analyst-declared, not attested; treat high trust as advisory only"
-        )
+    producer_registry = _load_producer_registry(storage)
+    records = _attest_records(
+        records,
+        requested_trust=trust,
+        producer_registry=producer_registry,
+        warnings=warnings,
+    )
 
     # Resolve or create a session.
     if session_id is None:
@@ -97,6 +169,12 @@ def ingest_file(
                 "refusing to merge external evidence into a non-ingest session without "
                 "--merge-into-analysis"
             )
+        if profile != "ingest" and allow_merge_into_analysis and not _allow_merge_into_analysis(storage):
+            raise ValueError(
+                "merge into analysis sessions is disabled by workspace ingest policy "
+                "(release default); enable allow_merge_into_analysis in workspace.toml "
+                "to permit this unsafe operation"
+            )
 
     # Merge records into the existing graph if present; otherwise start fresh.
     graph = storage.load_evidence_graph(session_id) or EvidenceGraph()
@@ -112,7 +190,17 @@ def ingest_file(
         data={
             "adapter": adapter_name,
             "source_file": str(file),
-            "trust": trust,
+            "requested_trust": _normalize_trust(trust),
+            "trust": (
+                records[0].provenance.trust
+                if records and len({r.provenance.trust for r in records}) == 1
+                else "mixed"
+            ),
+            "attested_producers": sorted({
+                r.provenance.source_tool
+                for r in records
+                if r.provenance.attested
+            }),
             "external": True,  # marker: this is imported, not Drake-generated
         },
     ))

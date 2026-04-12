@@ -25,6 +25,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass
+import math
 from typing import Any
 
 from ..core.storage import WorkspaceStorage
@@ -45,6 +46,11 @@ class _Signature:
 
 
 _IOC_DOMAINS = {"apk", "web", "recon"}
+_COMMON_IMPORT_SUPPRESSION = {
+    "kernel32.dll!getprocaddress",
+    "kernel32.dll!loadlibrarya",
+    "kernel32.dll!loadlibraryw",
+}
 
 
 def _is_external_node(node) -> bool:
@@ -139,6 +145,7 @@ def correlate_samples(
     graphs = load_all_graphs(storage)
     signatures = {sid: _extract_signature(g) for sid, g in graphs.items()}
     has_external = {sid: _graph_has_external(g) for sid, g in graphs.items()}
+    doc_freq = _document_frequency(signatures)
 
     correlations: list[SampleCorrelation] = []
     ids = sorted(signatures.keys())
@@ -160,7 +167,7 @@ def correlate_samples(
                     or any(nid.startswith("ext:") or nid.startswith("ingest:") for nid in item.target_node_ids)
                     for item in shared
                 ),
-                score=_score(shared),
+                score=_score(shared, doc_freq=doc_freq, session_count=len(graphs)),
             ))
 
     correlations.sort(
@@ -198,6 +205,8 @@ def _extract_signature(graph: EvidenceGraph) -> _Signature:
             func = str(node.data.get("function", "")).lower()
             if dll and func:
                 key = f"{dll}!{func}"
+                if key in _COMMON_IMPORT_SUPPRESSION:
+                    continue
                 by_basis["shared_import"].setdefault(key, []).append(node.node_id)
 
         # Shellcode prefixes — first 16 hex chars of preview.
@@ -242,6 +251,18 @@ def _extract_signature(graph: EvidenceGraph) -> _Signature:
     return _Signature(by_basis=by_basis)
 
 
+def _document_frequency(
+    signatures: dict[str, _Signature]
+) -> dict[tuple[str, str], int]:
+    out: dict[tuple[str, str], int] = {}
+    for sig in signatures.values():
+        for basis, values in sig.by_basis.items():
+            for value in values.keys():
+                key = (basis, value)
+                out[key] = out.get(key, 0) + 1
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Pairing
 # ---------------------------------------------------------------------------
@@ -266,7 +287,12 @@ def _pair_shared(a: _Signature, b: _Signature) -> list[SharedEvidence]:
     return shared
 
 
-def _score(shared: Iterable[SharedEvidence]) -> float:
+def _score(
+    shared: Iterable[SharedEvidence],
+    *,
+    doc_freq: dict[tuple[str, str], int],
+    session_count: int,
+) -> float:
     """Map a list of shared-evidence items to a 0..1 score.
 
     Weighting reflects evidence specificity: a shared indicator-type
@@ -283,7 +309,18 @@ def _score(shared: Iterable[SharedEvidence]) -> float:
     }
     total = 0.0
     for item in shared:
-        total += weights.get(item.basis, 0.05)
+        base = weights.get(item.basis, 0.05)
+        df = doc_freq.get((item.basis, item.value), 1)
+        total += base * _idf_multiplier(df=df, session_count=session_count)
     # Smooth saturating transform: 1 - exp(-total)
-    import math
     return round(min(0.95, 1.0 - math.exp(-total)), 3)
+
+
+def _idf_multiplier(*, df: int, session_count: int) -> float:
+    if session_count <= 1:
+        return 1.0
+    capped_df = max(1, min(df, session_count))
+    max_idf = math.log((1 + session_count) / 2) + 1.0
+    idf = math.log((1 + session_count) / (1 + capped_df)) + 1.0
+    normalized = idf / max_idf if max_idf > 0 else 1.0
+    return round(max(0.15, min(1.0, normalized)), 3)

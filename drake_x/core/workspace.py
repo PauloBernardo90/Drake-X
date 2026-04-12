@@ -46,6 +46,8 @@ class WorkspaceConfig:
     default_timeout: int = 180
     default_module: str = "recon_passive"
     vt_api_key: str = ""
+    allow_ingest_merge_into_analysis: bool = False
+    ingest_producers: dict[str, str] = field(default_factory=dict)
     extra: dict[str, Any] = field(default_factory=dict)
 
     def to_toml(self) -> str:
@@ -75,6 +77,20 @@ class WorkspaceConfig:
         lines.append("[virustotal]")
         lines.append(f'api_key = "{self.vt_api_key}"')
         lines.append("")
+        lines.append("[ingest_policy]")
+        lines.append(
+            "allow_merge_into_analysis = "
+            f"{str(self.allow_ingest_merge_into_analysis).lower()}"
+        )
+        lines.append("")
+        if self.ingest_producers:
+            lines.append("[ingest_producers]")
+            for source_tool in sorted(self.ingest_producers.keys()):
+                escaped_tool = source_tool.replace("\\", "\\\\").replace('"', '\\"')
+                lines.append(
+                    f'"{escaped_tool}" = "{self.ingest_producers[source_tool]}"'
+                )
+            lines.append("")
         return "\n".join(lines) + "\n"
 
 
@@ -218,6 +234,8 @@ class Workspace:
                 "ollama_model": self.config.ollama_model,
                 "default_timeout": self.config.default_timeout,
                 "default_module": self.config.default_module,
+                "allow_ingest_merge_into_analysis": self.config.allow_ingest_merge_into_analysis,
+                "ingest_producers": dict(self.config.ingest_producers),
             },
             "scope_path": str(self.scope_path),
             "db_path": str(self.db_path),
@@ -225,6 +243,20 @@ class Workspace:
             "audit_log_path": str(self.audit_log_path),
             "scope_present": self.scope_path.exists(),
         }
+
+    def save_config(self) -> None:
+        self.config_path.write_text(self.config.to_toml(), encoding="utf-8")
+
+    def register_ingest_producer(self, source_tool: str, trust: str) -> None:
+        self.config.ingest_producers[source_tool] = trust
+        self.save_config()
+
+    def unregister_ingest_producer(self, source_tool: str) -> bool:
+        removed = self.config.ingest_producers.pop(source_tool, None)
+        if removed is not None:
+            self.save_config()
+            return True
+        return False
 
 
 # ----- internals -------------------------------------------------------------
@@ -239,6 +271,7 @@ def _load_workspace_config(path: Path) -> WorkspaceConfig:
 
     ai = data.get("ai", {}) or {}
     engine = data.get("engine", {}) or {}
+    ingest_policy = data.get("ingest_policy", {}) or {}
     return WorkspaceConfig(
         name=str(data.get("name") or path.parent.name),
         created_at=data.get("created_at"),
@@ -249,8 +282,20 @@ def _load_workspace_config(path: Path) -> WorkspaceConfig:
         default_timeout=int(engine.get("default_timeout", 180)),
         default_module=str(engine.get("default_module", "recon_passive")),
         vt_api_key=str((data.get("virustotal") or {}).get("api_key", "")),
-        extra={k: v for k, v in data.items() if k not in {"name", "ai", "engine", "virustotal", "created_at", "operator", "notes"}},
+        allow_ingest_merge_into_analysis=bool(
+            ingest_policy.get("allow_merge_into_analysis", False)
+        ),
+        ingest_producers={
+            str(k): str(v)
+            for k, v in (data.get("ingest_producers") or {}).items()
+            if isinstance(v, str)
+        },
+        extra={k: v for k, v in data.items() if k not in {"name", "ai", "engine", "virustotal", "ingest_policy", "ingest_producers", "created_at", "operator", "notes"}},
     )
+
+
+def load_workspace_config_file(path: Path) -> WorkspaceConfig:
+    return _load_workspace_config(path)
 
 
 # Convenience for places that just need to know the default location.
