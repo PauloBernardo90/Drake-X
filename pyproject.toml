@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drake-x"
-version = "0.7.0"
+version = "0.9.0"
 description = "Local-first evidence-driven malware analysis and threat investigation platform for Kali Linux with local AI assistance."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -72,6 +72,7 @@ packages = [
     "drake_x.integrations.binary",
     "drake_x.integrations.builtin",
     "drake_x.integrations.disasm",
+    "drake_x.integrations.exploit",
     "drake_x.integrations.ioc",
     "drake_x.integrations.native",
     "drake_x.integrations.optional",

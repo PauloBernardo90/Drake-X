@@ -105,11 +105,17 @@ pip install pefile capstone
 Primary outputs:
 
 ```text
-pe_analysis.json
-pe_report.md
-pe_executive.md
-entry_disasm.json
+pe_analysis.json       # Full analysis result (JSON)
+pe_report.md           # Technical report with exploit-awareness sections (v0.9)
+pe_executive.md        # Executive summary
+entry_disasm.json      # Bounded disassembly artifact
 ```
+
+v0.9 report includes (when detected):
+
+- Exploit-related capability assessment
+- Suspected shellcode artifacts
+- Protection-interaction assessment
 
 ## 6. Sessions and Reports
 

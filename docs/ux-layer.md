@@ -3,7 +3,7 @@
 See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`operator-control.md`](operator-control.md), [`usage.md`](usage.md)
 
-Drake-X v0.7 treats the UX layer as investigation guidance, not just
+Drake-X v0.8 treats the UX layer as investigation guidance, not just
 command convenience. The goal is to help the operator move through
 evidence collection, malware analysis, intelligence correlation, and
 reporting without removing control, hiding steps, or weakening the
@@ -88,7 +88,7 @@ drake assist start apk com.evil.dropper -w my-engagement
 5. Execute via existing engine (if approved)
 6. Repeat
 
-For v0.7, the intended use is malware-analysis triage and evidence
+For v0.8, the intended use is malware-analysis triage and evidence
 correlation first. Recon/web suggestions remain valid, but they should
 be framed as supporting collection steps rather than the product's
 default identity.

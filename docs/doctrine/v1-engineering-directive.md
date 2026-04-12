@@ -3,7 +3,7 @@
 Evidence-Driven Malware Analysis with Bounded Exploit-Awareness
 
 - Date: 2026-04-11
-- Scope: Drake-X v0.7 -> v1.0 evolution
+- Scope: Drake-X v0.8 -> v1.0 evolution
 - Classification: Internal engineering doctrine
 
 ## 1. Core Mission

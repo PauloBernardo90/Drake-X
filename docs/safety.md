@@ -4,7 +4,7 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`architecture.md`](architecture.md), [`usage.md`](usage.md)
 
 Safety in Drake-X is not a feature bolted on after the fact. It is a
-core architectural property. For v0.7, that means two things at once:
+core architectural property. For v0.8, that means two things at once:
 target-facing collection workflows remain tightly scoped and controlled,
 and local sample-analysis workflows remain evidence-preserving,
 auditable, and non-weaponizing.
@@ -189,7 +189,7 @@ AI-generated interpretation:
 - **AI tasks never see the scope file.** Authorization metadata stays
   out of prompts.
 
-For v0.7, the reporting model expands this into four explicit evidence
+For v0.8, the reporting model expands this into four explicit evidence
 classes:
 
 - `fact` — observed parser/tool output

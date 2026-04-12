@@ -141,6 +141,143 @@ class PeProtectionStatus(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# v0.9 — Exploit-Awareness Models
+# ---------------------------------------------------------------------------
+
+
+class ExploitIndicatorType(StrEnum):
+    """Categories for exploit-related indicators.
+
+    Each type represents a class of exploit-related signal, not a
+    confirmed exploit.
+    """
+
+    STACK_CORRUPTION = "stack_corruption"
+    CONTROL_FLOW_HIJACK = "control_flow_hijack"
+    INJECTION_CHAIN = "injection_chain"
+    SHELLCODE_SETUP = "shellcode_setup"
+    ROP_INDICATOR = "rop_indicator"
+    FORMAT_STRING = "format_string"
+    HEAP_MANIPULATION = "heap_manipulation"
+
+
+class ExploitIndicator(BaseModel):
+    """A suspected exploit-related indicator detected by heuristics.
+
+    These are **analytical hypotheses**, not confirmed exploit capability.
+    All indicators use conservative language: *suspected*, *potential*,
+    *requires validation*.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    indicator_type: ExploitIndicatorType
+    title: str
+    description: str
+    severity: Literal["info", "low", "medium", "high"] = "medium"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    evidence_refs: list[str] = Field(
+        default_factory=list,
+        description="Concrete evidence backing this indicator (API names, section names, patterns).",
+    )
+    mitre_attck: list[str] = Field(default_factory=list)
+    caveats: list[str] = Field(
+        default_factory=list,
+        description="Explicit uncertainty language: 'suspected', 'requires validation', etc.",
+    )
+    requires_dynamic_validation: bool = True
+
+
+class SuspectedShellcodeArtifact(BaseModel):
+    """A bounded shellcode-like blob extracted as evidence.
+
+    This is a **suspected** artifact — not a confirmed payload.
+    Drake-X does not execute, validate, or weaponize shellcode.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source_location: str = Field(
+        default="",
+        description="Where the blob was found: section name, resource, or overlay.",
+    )
+    offset: int = 0
+    size: int = 0
+    entropy: float = 0.0
+    detection_reason: str = ""
+    confidence: float = Field(default=0.4, ge=0.0, le=1.0)
+    preview_hex: str = Field(
+        default="",
+        description="First N bytes as hex string for triage — never a complete dump.",
+    )
+    caveats: list[str] = Field(
+        default_factory=list,
+        description="Always includes 'suspected shellcode-like blob — requires dynamic validation'.",
+    )
+
+
+class BoundedDecodingArtifact(BaseModel):
+    """Result of bounded decoding applied to a suspected artifact.
+
+    Decoding is strictly for classification and evidence extraction.
+    Decoded output must never be framed as reusable payload.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    source_artifact: str = Field(
+        default="",
+        description="Reference to the SuspectedShellcodeArtifact source.",
+    )
+    decode_method: str = Field(
+        default="",
+        description="Method used: xor_single, xor_rolling, base64, etc.",
+    )
+    decoded_size: int = 0
+    decoded_entropy: float = 0.0
+    classification_hint: str = Field(
+        default="",
+        description="What the decoded content appears to be: PE header, ELF header, script, unknown.",
+    )
+    confidence: float = Field(default=0.3, ge=0.0, le=1.0)
+    partial: bool = True
+    caveats: list[str] = Field(
+        default_factory=list,
+        description="Always includes 'bounded decoding for classification only — not operational'.",
+    )
+
+
+class ProtectionInteractionAssessment(BaseModel):
+    """Analytical assessment of how observed capability interacts with protections.
+
+    This is an **analytic assessment**, not bypass guidance.
+    Drake-X does not produce operational bypass steps.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    protection: str = Field(
+        default="",
+        description="Protection being assessed: DEP, ASLR, CFG, SafeSEH.",
+    )
+    protection_enabled: bool = False
+    observed_capability: str = Field(
+        default="",
+        description="What the sample appears to do that relates to this protection.",
+    )
+    interaction_assessment: str = Field(
+        default="",
+        description="Analytical conclusion: how the capability interacts with the protection status.",
+    )
+    severity: Literal["info", "low", "medium", "high"] = "info"
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    caveats: list[str] = Field(
+        default_factory=list,
+        description="Always includes 'requires dynamic validation'.",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Top-level analysis result
 # ---------------------------------------------------------------------------
 
@@ -175,6 +312,22 @@ class PeAnalysisResult(BaseModel):
     # Phase 3+ — analysis outputs (populated in later phases)
     import_risk_findings: list[dict[str, Any]] = Field(default_factory=list)
     suspicious_patterns: list[dict[str, Any]] = Field(default_factory=list)
+
+    # v0.9 — Exploit-Awareness outputs
+    exploit_indicators: list[ExploitIndicator] = Field(default_factory=list)
+    suspected_shellcode: list[SuspectedShellcodeArtifact] = Field(default_factory=list)
+    bounded_decodings: list[BoundedDecodingArtifact] = Field(default_factory=list)
+    protection_interactions: list[ProtectionInteractionAssessment] = Field(default_factory=list)
+
+    # v0.9 — AI exploit assessment (optional; populated when
+    # --ai-exploit-assessment is requested and the Ollama runtime is
+    # reachable). This is an analytic assessment, NOT operational guidance.
+    ai_exploit_assessment: dict[str, Any] | None = None
+
+    # v0.9 — Graph snapshot (optional). When set, this is a JSON-serialized
+    # EvidenceGraph for the PE subgraph. Reports and detection writers
+    # may consult it; the canonical in-memory graph lives off the model.
+    graph_snapshot: dict[str, Any] | None = None
 
     # Metadata
     warnings: list[str] = Field(default_factory=list)

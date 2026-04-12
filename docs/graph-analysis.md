@@ -5,11 +5,13 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 
 ## Overview
 
-Drake-X v0.7 treats the Evidence Graph as the central abstraction for
-evidence-driven malware analysis and threat investigation. Analysts and
-AI tasks use it to explore structured relationships between findings,
-artifacts, indicators, protections, enrichments, and assessments across
-analysis domains.
+Drake-X v0.9 promotes the Evidence Graph from a parallel view to the
+canonical integration bus for PE analysis, with deterministic node IDs
+and `supports`/`derived_from` edges linking indicators back to the
+static evidence that justifies them. Analysts and AI tasks use it to
+explore structured relationships between findings, artifacts,
+indicators, protections, enrichments, and assessments across analysis
+domains. APK-domain graph-first migration is tracked for v1.0.
 
 ## `drake graph show`
 

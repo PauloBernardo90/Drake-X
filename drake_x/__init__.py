@@ -7,5 +7,5 @@ model for triage and classification. It does not perform exploitation, brute
 forcing, payload generation, or post-exploitation.
 """
 
-__version__ = "0.7.0"
+__version__ = "0.9.0"
 __all__ = ["__version__"]

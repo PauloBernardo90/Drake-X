@@ -158,4 +158,25 @@ def pe_result_to_findings(result: PeAnalysisResult) -> list[Finding]:
                 tags=["pe", "anomaly", anomaly.anomaly_type],
             ))
 
+    # Exploit-indicator findings (v0.9)
+    for ei in result.exploit_indicators:
+        findings.append(Finding(
+            title=f"Exploit indicator: {ei.title}",
+            summary=ei.description,
+            severity=FindingSeverity(ei.severity),
+            confidence=ei.confidence,
+            source=FindingSource.RULE,
+            fact_or_inference="inference",
+            related_tools=["pefile"],
+            evidence=[FindingEvidence(
+                artifact_kind=f"pe.exploit_indicator.{ei.indicator_type.value}",
+                tool_name="pefile",
+                excerpt=", ".join(ei.evidence_refs[:5]),
+                confidence=ei.confidence,
+            )],
+            mitre_attck=ei.mitre_attck,
+            caveats=ei.caveats,
+            tags=["pe", "exploit_indicator", ei.indicator_type.value],
+        ))
+
     return findings

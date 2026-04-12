@@ -4,7 +4,7 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`kali-setup.md`](kali-setup.md), [`llm-setup.md`](llm-setup.md)
 
 This is the long-form companion to the README "Quick tour" section. For
-v0.7, read it as a walkthrough of Drake-X's evidence-driven analysis
+v0.8, read it as a walkthrough of Drake-X's evidence-driven analysis
 model: workspace setup first, then malware analysis and threat
 investigation workflows, with recon/web collection available as
 supporting evidence-gathering domains when needed.

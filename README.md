@@ -34,11 +34,11 @@ The code and the AI prompts both enforce this boundary.
 
 ## Current Platform Status
 
-Drake-X v0.8 delivers the first native-binary foundation layer for the
-platform. Windows PE static analysis is now a first-class workflow,
-alongside the existing APK/mobile pipeline, local intelligence
-enrichment, analyst-assisted dynamic validation, and evidence-linked
-reporting.
+Drake-X v0.9 adds the exploit-awareness layer on top of v0.8 native
+foundations. PE analysis now detects exploit-related indicators, carves
+suspected shellcode artifacts, performs bounded decoding for triage,
+assesses protection-interaction, maps findings to ATT&CK, and supports
+AI-assisted exploit-aware assessment with strict evidence citation.
 
 The center of gravity is malware analysis, native inspection,
 intelligence correlation, and analyst-assisted validation. Recon and web
@@ -80,13 +80,25 @@ dynamic-validation hypotheses all converge into a shared evidence graph.
 observation templates, Ghidra-backed deeper analysis, and evidence-linked
 reporting for analyst review.
 
-**PE analysis (v0.8).** `drake pe analyze sample.exe` parses PE headers,
+**PE analysis (v0.9).** `drake pe analyze sample.exe` parses PE headers,
 sections, imports, exports, and resources. Assesses protection status
 (ASLR, DEP, CFG, SafeSEH, GS), classifies import risk with ATT&CK
-mapping, detects structural anomalies, and produces a structured
-technical report. Bounded disassembly is currently limited to the
-entry-point region and is emitted as a structured artifact. `pefile` and
-`capstone` are optional and degrade gracefully when absent.
+mapping, detects structural anomalies, identifies exploit-related
+indicators, carves suspected shellcode artifacts, performs bounded
+decoding for classification triage, and assesses protection-interaction.
+Produces a structured technical report with exploit-awareness sections.
+`pefile` and `capstone` are optional and degrade gracefully when absent.
+
+v0.9 also writes the PE analysis onto the **Evidence Graph** as its
+canonical integration bus (`pe_graph.json`) with node-ID evidence refs
+linking indicators to supporting imports, sections, and protections.
+With `--ai-exploit-assessment` an opt-in, locally-hosted Ollama model
+produces a bounded, graph-retrieved exploit-capability assessment; every
+call is recorded in an append-only audit log under `ai_audit/`
+(`docs/ai-auditability.md`). With `--detection-output` Drake-X emits
+**candidate** YARA rules and a STIX 2.1 bundle for analyst review
+(`docs/detection-outputs.md`); rules are never presented as validated
+detections.
 
 **Scope enforcement.** Operator-declared in-scope and out-of-scope
 network assets (domain, wildcard, IP, CIDR, URL prefix). Out-of-scope

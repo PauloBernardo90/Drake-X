@@ -5,7 +5,7 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 
 Drake-X's AI layer is **local-only**. There is no remote AI client in
 the code and no telemetry. The optional LLM runs on the same Kali host
-via [Ollama](https://ollama.com/). For v0.7, the model should be read
+via [Ollama](https://ollama.com/). For v0.8, the model should be read
 as an analyst assistant over structured malware-analysis and threat-
 investigation evidence, not as an autonomous operator.
 

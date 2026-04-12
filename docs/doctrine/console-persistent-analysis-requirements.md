@@ -3,7 +3,7 @@
 Requirements for a persistent investigation console in Drake-X.
 
 - Date: 2026-04-11
-- Scope: Post-v0.7 CLI UX evolution
+- Scope: Post-v0.8 CLI UX evolution
 - Status: Draft requirements
 
 ## 1. Objective

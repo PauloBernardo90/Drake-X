@@ -17,6 +17,7 @@ from ..integrations.apk.file_tool import compute_hashes, identify_file
 from ..integrations.binary.format_detect import BinaryFormat, detect_format
 from ..integrations.binary.pe_parser import is_available as pefile_available, parse_pe
 from ..logging import get_logger
+from ..models.evidence_graph import EvidenceGraph
 from ..models.pe import PeAnalysisResult, PeMetadata
 
 log = get_logger("pe_analyze")
@@ -107,6 +108,53 @@ def run_analysis(
     result.suspicious_patterns = assess_sections(result.sections)
 
     # ------------------------------------------------------------------
+    # Phase 3b — Exploit-indicator heuristics (v0.9)
+    # ------------------------------------------------------------------
+    log.info("Phase 3b: exploit-indicator heuristics (v0.9)")
+    from ..normalize.binary.exploit_indicators import detect_exploit_indicators
+
+    result.exploit_indicators = detect_exploit_indicators(result)
+
+    # ------------------------------------------------------------------
+    # Phase 3c — Shellcode carving (v0.9)
+    # ------------------------------------------------------------------
+    log.info("Phase 3c: suspected shellcode carving (v0.9)")
+    from ..integrations.exploit.shellcode_carver import carve_suspected_shellcode
+
+    pe_data: bytes | None = None
+    try:
+        pe_data = sample.read_bytes()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Could not read PE data for shellcode scan: %s", exc)
+
+    result.suspected_shellcode = carve_suspected_shellcode(result, pe_data=pe_data)
+
+    # Bounded decoding for suspected shellcode artifacts
+    if result.suspected_shellcode and pe_data is not None:
+        log.info("Phase 3c: bounded decoding for triage")
+        from ..integrations.exploit.shellcode_decode import bounded_decode
+
+        for artifact in result.suspected_shellcode:
+            if artifact.preview_hex:
+                try:
+                    blob = bytes.fromhex(artifact.preview_hex)
+                    decodings = bounded_decode(
+                        blob,
+                        source_ref=f"{artifact.source_location}@{artifact.offset}",
+                    )
+                    result.bounded_decodings.extend(decodings)
+                except Exception as exc:  # noqa: BLE001
+                    log.debug("Bounded decode failed for %s: %s", artifact.source_location, exc)
+
+    # ------------------------------------------------------------------
+    # Phase 3d — Protection-interaction assessment (v0.9)
+    # ------------------------------------------------------------------
+    log.info("Phase 3d: protection-interaction assessment (v0.9)")
+    from ..normalize.binary.protection_interaction import assess_protection_interactions
+
+    result.protection_interactions = assess_protection_interactions(result)
+
+    # ------------------------------------------------------------------
     # Phase 4 — Bounded disassembly (entry point region)
     # ------------------------------------------------------------------
     log.info("Phase 4: bounded disassembly")
@@ -139,12 +187,165 @@ def run_analysis(
     # ------------------------------------------------------------------
     log.info(
         "Analysis complete: %d sections, %d imports, %d exports, %d anomalies, "
-        "%d import risks, %d section signals",
+        "%d import risks, %d section signals, %d exploit indicators, "
+        "%d suspected shellcode, %d protection interactions",
         len(result.sections),
         len(result.imports),
         len(result.exports),
         len(result.anomalies),
         len(result.import_risk_findings),
         len(result.suspicious_patterns),
+        len(result.exploit_indicators),
+        len(result.suspected_shellcode),
+        len(result.protection_interactions),
     )
     return result
+
+
+# ---------------------------------------------------------------------------
+# v0.9 — Graph-first helpers and AI exploit-assessment wiring
+# ---------------------------------------------------------------------------
+
+
+def build_graph(result: PeAnalysisResult) -> EvidenceGraph:
+    """Build the Evidence Graph for a completed PE analysis.
+
+    Separated from :func:`run_analysis` so the graph can be consumed
+    without forcing AI invocation, and so tests can exercise graph
+    construction deterministically.
+    """
+    from ..graph.pe_writer import build_pe_graph, dedupe_graph
+
+    graph = build_pe_graph(result)
+    return dedupe_graph(graph)
+
+
+def attach_graph_snapshot(result: PeAnalysisResult, graph: EvidenceGraph) -> None:
+    """Attach a JSON-serializable snapshot of *graph* to *result*."""
+    result.graph_snapshot = graph.to_dict()
+
+
+def run_ai_exploit_assessment(
+    result: PeAnalysisResult,
+    graph: EvidenceGraph,
+    *,
+    ollama_base_url: str,
+    ollama_model: str,
+    audit_dir: Path | None = None,
+    session_id: str | None = None,
+) -> dict | None:
+    """Run the AI exploit-assessment task against an already-built graph.
+
+    Returns the parsed AI response (also stored on
+    ``result.ai_exploit_assessment``) or ``None`` if the runtime was
+    unreachable / the response was not valid JSON. Failures never raise;
+    a warning is appended to ``result.warnings``.
+
+    An audit record is always written when ``audit_dir`` is provided,
+    regardless of success or failure — auditability must not depend on
+    the model answering correctly.
+    """
+    import asyncio
+
+    from ..ai.audit import build_record, write_record
+    from ..ai.context_builder import build_pe_exploit_context
+    from ..ai.ollama_client import OllamaClient
+    from ..ai.tasks.exploit_assessment import ExploitAssessmentTask
+
+    built = build_pe_exploit_context(
+        graph=graph,
+        pe_result=result,
+        target_display=result.metadata.sha256[:16] or "pe-sample",
+        session_id=session_id,
+    )
+
+    task = ExploitAssessmentTask()
+    client = OllamaClient(base_url=ollama_base_url, model=ollama_model)
+
+    # Reproduce the exact prompt that will be sent so the audit log hashes
+    # what the model actually saw.
+    try:
+        prompt = task._build_prompt(built.task_context)  # noqa: SLF001 — audit needs the exact text
+    except Exception as exc:  # noqa: BLE001
+        result.warnings.append(f"AI exploit assessment: prompt build failed: {exc}")
+        if audit_dir is not None:
+            rec = build_record(
+                task=task.name,
+                model=ollama_model,
+                prompt="",
+                context_node_ids=built.context_node_ids,
+                raw_response="",
+                parsed=None,
+                truncation_notes=built.truncation_notes,
+                ok=False,
+                error=f"prompt build failed: {exc}",
+            )
+            write_record(rec, audit_dir)
+        return None
+
+    log.info("AI exploit assessment: %d context nodes, prompt %d chars",
+             len(built.context_node_ids), len(prompt))
+
+    try:
+        task_result = asyncio.run(task.run(client=client, context=built.task_context))
+    except Exception as exc:  # noqa: BLE001
+        result.warnings.append(f"AI exploit assessment failed: {exc}")
+        task_result = None
+
+    if task_result is None:
+        parsed = None
+        raw = ""
+        ok = False
+        error = "task execution raised"
+    else:
+        parsed = task_result.parsed
+        raw = task_result.raw_text or ""
+        ok = task_result.ok
+        error = task_result.error
+        if not ok and error:
+            result.warnings.append(f"AI exploit assessment degraded: {error}")
+
+    if audit_dir is not None:
+        rec = build_record(
+            task=task.name,
+            model=ollama_model,
+            prompt=prompt,
+            context_node_ids=built.context_node_ids,
+            raw_response=raw,
+            parsed=parsed,
+            truncation_notes=built.truncation_notes,
+            ok=ok,
+            error=error,
+        )
+        write_record(rec, audit_dir)
+
+    if parsed is not None:
+        # Store on the result and mirror into the graph as a finding node
+        # so downstream consumers can reference it by ID.
+        result.ai_exploit_assessment = parsed
+        from ..graph.pe_writer import ai_assessment_id
+        from ..models.evidence_graph import EdgeType, EvidenceEdge, EvidenceNode, NodeKind
+        from ..graph.pe_writer import artifact_id as _art
+
+        sha = result.metadata.sha256 or "unknown"
+        ai_nid = ai_assessment_id(sha)
+        graph.add_node(EvidenceNode(
+            node_id=ai_nid,
+            kind=NodeKind.FINDING,
+            domain="pe",
+            label="AI exploit assessment",
+            data={
+                "overall_confidence": parsed.get("overall_confidence"),
+                "summary": parsed.get("exploit_capability_summary"),
+                "context_node_ids": built.context_node_ids,
+                "model": ollama_model,
+            },
+        ))
+        graph.add_edge(EvidenceEdge(
+            source_id=ai_nid,
+            target_id=_art(sha),
+            edge_type=EdgeType.DERIVED_FROM,
+            notes="AI-assisted assessment derived from PE analysis subgraph",
+        ))
+
+    return parsed

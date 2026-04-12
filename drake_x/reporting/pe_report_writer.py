@@ -11,7 +11,13 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..models.pe import PeAnalysisResult, PeProtectionStatus
+from ..models.pe import (
+    ExploitIndicator,
+    PeAnalysisResult,
+    PeProtectionStatus,
+    ProtectionInteractionAssessment,
+    SuspectedShellcodeArtifact,
+)
 
 
 def render_pe_markdown(result: PeAnalysisResult) -> str:
@@ -26,6 +32,10 @@ def render_pe_markdown(result: PeAnalysisResult) -> str:
     _sec_protection(lines, result)
     _sec_anomalies(lines, result)
     _sec_behavioral_signals(lines, result)
+    _sec_exploit_capability(lines, result)
+    _sec_suspected_shellcode(lines, result)
+    _sec_protection_interaction(lines, result)
+    _sec_ai_exploit_assessment(lines, result)
     _sec_recommendations(lines, result)
     return "\n".join(lines).rstrip() + "\n"
 
@@ -89,9 +99,21 @@ def _sec_executive(lines: list[str], r: PeAnalysisResult) -> None:
     else:
         lines.append("No binary protections detected (ASLR, DEP, CFG all absent).")
 
+    # v0.9 exploit-awareness summary
+    if r.exploit_indicators:
+        high_ei = [ei for ei in r.exploit_indicators if ei.severity == "high"]
+        lines.append(f"**{len(r.exploit_indicators)}** exploit-related indicator(s) "
+                     f"detected ({len(high_ei)} high-severity). "
+                     "All indicators are suspected and require dynamic validation.")
+    if r.suspected_shellcode:
+        lines.append(f"**{len(r.suspected_shellcode)}** suspected shellcode-like "
+                     "artifact(s) identified for triage.")
+
     lines.append("")
     lines.append("> All conclusions separate **observed evidence** from **analytic "
-                 "assessment**. Nothing constitutes definitive attribution.")
+                 "assessment**. Nothing constitutes definitive attribution. "
+                 "Exploit-related findings are analytical hypotheses requiring "
+                 "dynamic validation.")
     lines.append("")
 
 
@@ -300,8 +322,203 @@ def _sec_behavioral_signals(lines: list[str], r: PeAnalysisResult) -> None:
         lines.append("")
 
 
+def _sec_exploit_capability(lines: list[str], r: PeAnalysisResult) -> None:
+    if not r.exploit_indicators:
+        return
+
+    lines.append("## 10. Exploit-Related Capability Assessment")
+    lines.append("")
+    lines.append("> **Source classification:** analytic assessment (heuristic-based "
+                 "exploit-related indicators — requires dynamic validation)")
+    lines.append("")
+    lines.append("The following exploit-related indicators were detected through "
+                 "deterministic heuristic analysis. These are **suspected** "
+                 "indicators, not confirmed exploit capability.")
+    lines.append("")
+
+    lines.append("| Indicator | Severity | Confidence | Evidence |")
+    lines.append("|-----------|----------|------------|----------|")
+    for ei in r.exploit_indicators:
+        evidence = ", ".join(ei.evidence_refs[:3])
+        lines.append(
+            f"| {ei.title} | {ei.severity} | {ei.confidence:.0%} | {evidence} |"
+        )
+    lines.append("")
+
+    # ATT&CK references from indicators
+    attck_refs = set()
+    for ei in r.exploit_indicators:
+        attck_refs.update(ei.mitre_attck)
+    if attck_refs:
+        lines.append(f"**Associated ATT&CK techniques:** {', '.join(sorted(attck_refs))}")
+        lines.append("")
+
+    lines.append("> **Important:** All indicators above are analytical hypotheses. "
+                 "Exploitation capability requires dynamic validation to confirm. "
+                 "Drake-X does not generate exploit chains or bypass instructions.")
+    lines.append("")
+
+
+def _sec_suspected_shellcode(lines: list[str], r: PeAnalysisResult) -> None:
+    if not r.suspected_shellcode:
+        return
+
+    lines.append("## 11. Suspected Shellcode Artifacts")
+    lines.append("")
+    lines.append("> **Source classification:** analytic assessment (heuristic-based "
+                 "shellcode detection — all artifacts are suspected, not confirmed)")
+    lines.append("")
+
+    lines.append("| Location | Offset | Size | Entropy | Detection Reason | Confidence |")
+    lines.append("|----------|--------|------|---------|-----------------|------------|")
+    for sc in r.suspected_shellcode:
+        lines.append(
+            f"| {sc.source_location} | 0x{sc.offset:x} | {sc.size} | "
+            f"{sc.entropy:.2f} | {sc.detection_reason[:50]} | {sc.confidence:.0%} |"
+        )
+    lines.append("")
+
+    if r.bounded_decodings:
+        lines.append("### Bounded Decoding Results")
+        lines.append("")
+        lines.append("The following bounded decoding attempts were applied for "
+                     "classification and triage purposes only:")
+        lines.append("")
+        for bd in r.bounded_decodings:
+            lines.append(f"- **{bd.decode_method}:** {bd.classification_hint} "
+                         f"(confidence: {bd.confidence:.0%}, partial: {bd.partial})")
+        lines.append("")
+
+    lines.append("> **Important:** Suspected shellcode artifacts are analytical "
+                 "observations, not confirmed payloads. Drake-X does not execute, "
+                 "simulate, or weaponize shellcode. Dynamic validation is required.")
+    lines.append("")
+
+
+def _sec_protection_interaction(lines: list[str], r: PeAnalysisResult) -> None:
+    if not r.protection_interactions:
+        return
+
+    lines.append("## 12. Protection-Interaction Assessment")
+    lines.append("")
+    lines.append("> **Source classification:** analytic assessment (how observed "
+                 "capability may interact with binary protections)")
+    lines.append("")
+
+    for pi in r.protection_interactions:
+        status = "Enabled" if pi.protection_enabled else "**Disabled**"
+        lines.append(f"### {pi.protection} ({status})")
+        lines.append("")
+        lines.append(f"**Observed capability:** {pi.observed_capability}")
+        lines.append("")
+        lines.append(f"**Assessment:** {pi.interaction_assessment}")
+        lines.append("")
+        if pi.caveats:
+            lines.append(f"**Caveats:** {'; '.join(pi.caveats)}")
+            lines.append("")
+
+    lines.append("> **Important:** Protection-interaction assessments are analytical "
+                 "observations about how observed capability relates to protection "
+                 "status. These are not bypass instructions or operational guidance.")
+    lines.append("")
+
+
+def _sec_ai_exploit_assessment(lines: list[str], r: PeAnalysisResult) -> None:
+    """Render the AI-assisted exploit assessment block, if present."""
+    ai = r.ai_exploit_assessment
+    if not ai:
+        return
+
+    lines.append("## AI-Assisted Exploit Assessment")
+    lines.append("")
+    lines.append("> **Source classification:** analytic assessment produced by a "
+                 "local LLM over a bounded subgraph of the deterministic findings. "
+                 "This is not a detection. Every AI claim in this section is "
+                 "either cited to the deterministic evidence above or MUST be "
+                 "treated as unverified.")
+    lines.append("")
+
+    if summary := ai.get("exploit_capability_summary"):
+        lines.append("**Capability summary.** " + str(summary))
+        lines.append("")
+
+    if observed := ai.get("observed_indicators"):
+        lines.append("### Observed indicators (as reported by the model)")
+        lines.append("")
+        lines.append("| Indicator | Evidence cited | Model confidence |")
+        lines.append("|-----------|----------------|------------------|")
+        for item in observed:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"| {item.get('indicator', '')} "
+                f"| {item.get('evidence', '')} "
+                f"| {item.get('confidence', '')} |"
+            )
+        lines.append("")
+
+    if pi := ai.get("protection_interaction"):
+        lines.append("### Protection-interaction (model assessment)")
+        lines.append("")
+        for item in pi:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"- **{item.get('protection', '')}** "
+                f"({item.get('status', '')}): {item.get('assessment', '')}"
+            )
+        lines.append("")
+
+    if attck := ai.get("attck_techniques"):
+        lines.append("### ATT&CK techniques (model-proposed, evidence-cited)")
+        lines.append("")
+        for item in attck:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                f"- **{item.get('technique_id', '')} — {item.get('technique_name', '')}**: "
+                f"{item.get('evidence_basis', '')}"
+            )
+        lines.append("")
+
+    if validation := ai.get("dynamic_validation_needed"):
+        lines.append("### Requires dynamic validation")
+        lines.append("")
+        for v in validation:
+            lines.append(f"- {v}")
+        lines.append("")
+
+    if caveats := ai.get("caveats"):
+        lines.append("### Caveats (as stated by the model)")
+        lines.append("")
+        for c in caveats:
+            lines.append(f"- {c}")
+        lines.append("")
+
+    overall = ai.get("overall_confidence")
+    if overall:
+        lines.append(f"**Overall model confidence:** {overall}")
+        lines.append("")
+
+    lines.append("> The AI assessment was produced with graph-bounded context. "
+                 "See `ai_audit/exploit_assessment.jsonl` for the exact prompt hash, "
+                 "model identifier, context node IDs, and raw response. Nothing "
+                 "in this section is operational exploitation guidance.")
+    lines.append("")
+
+
 def _sec_recommendations(lines: list[str], r: PeAnalysisResult) -> None:
-    lines.append("## 10. Validation Recommendations")
+    # Dynamic section number based on whether exploit-awareness sections exist
+    sec_num = 10
+    if r.exploit_indicators:
+        sec_num += 1
+    if r.suspected_shellcode:
+        sec_num += 1
+    if r.protection_interactions:
+        sec_num += 1
+    if r.ai_exploit_assessment:
+        sec_num += 1
+    lines.append(f"## {sec_num}. Validation Recommendations")
     lines.append("")
     lines.append("### Recommended Next Steps")
     lines.append("")
@@ -327,6 +544,17 @@ def _sec_recommendations(lines: list[str], r: PeAnalysisResult) -> None:
         lines.append(f"- **Install missing tools:** {', '.join(r.tools_skipped)} "
                      "for additional analysis coverage.")
 
+    # v0.9 exploit-awareness validation
+    if r.exploit_indicators:
+        lines.append("- **Exploit-indicator validation:** Confirm suspected exploit "
+                     "indicators through dynamic analysis in an isolated environment.")
+    if r.suspected_shellcode:
+        lines.append("- **Shellcode triage:** Examine suspected shellcode artifacts "
+                     "in a controlled debugger session to determine actual payload behavior.")
+    if r.protection_interactions:
+        lines.append("- **Protection-interaction review:** Validate protection-interaction "
+                     "assessments through runtime observation of execution behavior.")
+
     lines.append("- **VirusTotal:** Submit hash for external intelligence enrichment.")
     lines.append("- **Network analysis:** Monitor traffic during sandbox execution "
                  "to identify C2 endpoints.")
@@ -336,5 +564,11 @@ def _sec_recommendations(lines: list[str], r: PeAnalysisResult) -> None:
     lines.append("> - Sections 3-7: **static fact** (directly parsed from PE structure)")
     lines.append("> - Section 8: **observed anomaly** (structural indicators)")
     lines.append("> - Section 9: **analytic assessment** (behavioral inference from imports)")
-    lines.append("> - Section 10: **analyst-assisted recommendations** (validation suggestions)")
+    if r.exploit_indicators:
+        lines.append("> - Section 10: **analytic assessment** (exploit-related capability indicators)")
+    if r.suspected_shellcode:
+        lines.append("> - Section 11: **analytic assessment** (suspected shellcode artifacts)")
+    if r.protection_interactions:
+        lines.append("> - Section 12: **analytic assessment** (protection-interaction assessment)")
+    lines.append(f"> - Final section: **analyst-assisted recommendations** (validation suggestions)")
     lines.append("")

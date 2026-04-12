@@ -4,7 +4,7 @@ See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`safety.md`](safety.md), [`operator-control.md`](operator-control.md)
 
 This document describes how Drake-X is structured, how its components
-interact, and how the design principles are enforced in code. For v0.7,
+interact, and how the design principles are enforced in code. For v0.8,
 the project should be read first as an evidence-driven malware analysis
 and threat investigation platform. Recon, web, and API collection
 remain in the system, but as supporting evidence-gathering domains
@@ -195,7 +195,48 @@ mutate storage directly. Their output is wrapped as
 `Finding(source=AI, fact_or_inference="inference")`.
 
 Implemented tasks cover summarization, classification, next-step
-suggestion, reporting, deduplication, and APK-specific assessment.
+suggestion, reporting, deduplication, APK-specific assessment, and
+(v0.9) PE exploit-aware assessment.
+
+**v0.9 — graph retrieval and auditability.** The PE exploit-assessment
+task (`drake_x.ai.tasks.exploit_assessment`) is invoked via
+`drake_x.ai.context_builder.build_pe_exploit_context`, which selects a
+bounded subgraph of the Evidence Graph (artifact root + all indicator
+nodes + high-risk imports + shellcode artifacts), serializes it
+deterministically, and passes it into the prompt. Every call is
+written to an append-only JSON Lines audit log under
+`<work_dir>/ai_audit/<task>.jsonl` with the prompt SHA-256, model
+identifier, sorted context node IDs, raw response, parsed response,
+and truncation notes. Audit writing does not depend on the model
+answering — unreachable runtimes and non-JSON responses are both
+recorded. See `docs/ai-auditability.md`.
+
+### Evidence Graph as canonical integration bus (v0.9)
+
+`drake_x/models/evidence_graph.py` defines the node/edge model. In
+v0.9 the PE pipeline (`drake_x/graph/pe_writer.py`) writes the graph
+as a first-class output of every PE analysis. Node IDs are
+deterministic and stable across runs (derived from the sample
+SHA-256), so downstream consumers (report writers, AI context builder,
+detection writers, session diffs) reference evidence by ID instead of
+by string keys. `merge_graphs` and `dedupe_graph` give the first-cut
+merge/dedup passes; deduplication preserves the higher-confidence
+edge on collision.
+
+The graph persists as JSON (`pe_graph.json` per analysis) for v0.9.
+A SQLite-backed store is planned for v1.0; because the graph's
+interface is already the canonical one, that swap does not change
+the surface.
+
+### Detection outputs (v0.9)
+
+`drake_x/reporting/detection_writer.py` converts PE evidence into
+candidate YARA rules and a STIX 2.1 bundle. Every rule is labeled
+`candidate`, metadata cites the source SHA-256, and conditions are
+conservative (e.g., injection-chain rules require three of the API
+strings to match). STIX bundles carry a top-level `x_drake_x` caveat
+and tag every indicator `candidate`/`drake-x-generated`. See
+`docs/detection-outputs.md`.
 
 ### Reporting pipeline (`drake_x/reporting/`)
 
@@ -215,7 +256,7 @@ Session-to-session diff (`drake_x/normalize/diff.py`) compares artifacts
 from two sessions and produces added/removed/changed entries for
 tracking attack-surface changes over time.
 
-For v0.7, the reporting model should be read through four explicit
+For v0.8, the reporting model should be read through four explicit
 evidence classes:
 
 - `fact` — observed parser/tool output

@@ -1,9 +1,9 @@
-# Drake-X Operator Control (v0.7)
+# Drake-X Operator Control (v0.8)
 
 See also: [`README.md`](README.md), [`cheat-sheet.md`](cheat-sheet.md),
 [`architecture.md`](architecture.md), [`ux-layer.md`](ux-layer.md)
 
-Drake-X v0.7 uses operator control to keep evidence collection,
+Drake-X v0.8 uses operator control to keep evidence collection,
 malware-analysis triage, and reporting transparent and reviewable. The
 goal is not just awareness, but disciplined analyst control over what is
 observed, enriched, hypothesized, and reported.
