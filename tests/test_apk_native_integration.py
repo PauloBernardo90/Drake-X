@@ -291,7 +291,25 @@ def test_apk_command_still_registered() -> None:
     from typer.testing import CliRunner
     from drake_x.cli import app
 
+    # Typer / Click defaults to an 80-column rendering width when no
+    # terminal is attached, which wraps help text mid-word. We force a
+    # wide ``COLUMNS`` so the assertion is stable across environments.
+    #
+    # The ``ghidra`` mention lives on ``drake apk analyze --help`` as
+    # the ``--ghidra`` option, not on the group ``drake apk --help``.
+    # The original assertion was against the wrong help level — it
+    # happened to fail only because of line-wrapping, masking the
+    # underlying incorrectness. We assert both levels explicitly:
+    #   (1) the ``apk`` group is registered and exposes ``analyze``
+    #   (2) the Ghidra integration is surfaced on ``analyze``.
     runner = CliRunner()
-    result = runner.invoke(app, ["apk", "--help"])
-    assert result.exit_code == 0
-    assert "ghidra" in result.output.lower()
+
+    group = runner.invoke(app, ["apk", "--help"], env={"COLUMNS": "240"})
+    assert group.exit_code == 0
+    assert "analyze" in group.output.lower(), \
+        "apk group must still expose the `analyze` subcommand"
+
+    analyze = runner.invoke(app, ["apk", "analyze", "--help"], env={"COLUMNS": "240"})
+    assert analyze.exit_code == 0
+    assert "ghidra" in analyze.output.lower(), \
+        "apk analyze --help must still surface the Ghidra integration"

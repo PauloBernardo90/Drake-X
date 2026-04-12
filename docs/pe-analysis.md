@@ -150,13 +150,24 @@ pipeline rather than an expanded Capstone path.
 
 ```
 <output-dir>/
-  pe_analysis.json      # structured analysis result
-  pe_report.md          # technical report
-  pe_executive.md       # executive summary
-  entry_disasm.json     # bounded disassembly (if Capstone available)
+  pe_analysis.json                    # structured analysis result
+                                      # (includes embedded evidence-graph snapshot)
+  pe_graph.json                       # Evidence Graph (v0.9)
+  pe_report.md                        # technical report
+  pe_executive.md                     # executive summary
+  entry_disasm.json                   # bounded disassembly (if Capstone available)
+
+  # Optional — present only when the relevant CLI flag is set
+  ai_audit/exploit_assessment.jsonl   # --ai-exploit-assessment
+  pe_candidates.yar                   # --detection-output (candidate YARA)
+  pe_stix.json                        # --detection-output (candidate STIX bundle)
 ```
 
 ## Report structure
+
+Sections are emitted conditionally based on what the analysis actually
+found — the report grows as evidence accumulates. A typical v0.9 run
+produces:
 
 1. Executive Summary
 2. Methodology
@@ -165,18 +176,29 @@ pipeline rather than an expanded Capstone path.
 5. Section Analysis (entropy, characteristics)
 6. Import Risk Assessment (API classification with ATT&CK)
 7. Protection Analysis (ASLR, DEP, CFG, SafeSEH, GS)
-8. Structural Anomalies
+8. Structural Anomalies *(only when present)*
 9. Behavioral Signals (injection chain, communication, evasion)
-10. Validation Recommendations
+10. Exploit-Related Capability Assessment *(only when indicators fire)*
+11. Suspected Shellcode Artifacts *(only when carved)*
+12. Protection-Interaction Assessment *(only when applicable)*
+13. AI-Assisted Exploit Assessment *(only with `--ai-exploit-assessment`
+    and when the model returns valid JSON)*
+14. Validation Recommendations *(final section; numbering shifts to
+    account for the conditional sections above)*
+
+The final section number is computed dynamically in the report writer
+(`drake_x/reporting/pe_report_writer.py`); consumers should not rely
+on fixed numbering.
 
 ## Evidence classification
 
-| Category | Label | Source |
-|----------|-------|--------|
-| **Static fact** | Sections 3-7 | Parser output |
-| **Observed anomaly** | Section 8 | Structural indicators |
-| **Analytic assessment** | Section 9 | Behavioral inference from imports |
-| **Analyst recommendation** | Section 10 | Validation suggestions |
+| Category | Sections | Source |
+|----------|----------|--------|
+| **Static fact** | Surface Analysis, PE Metadata, Section Analysis, Import Risk Assessment, Protection Analysis | Parser output |
+| **Observed anomaly** | Structural Anomalies | Structural indicators |
+| **Analytic assessment** | Behavioral Signals, Exploit-Related Capability Assessment, Suspected Shellcode Artifacts, Protection-Interaction Assessment | Heuristic inference over parsed evidence |
+| **AI-backed inference** | AI-Assisted Exploit Assessment | Local LLM over a bounded graph subcontext; audit log required |
+| **Analyst recommendation** | Validation Recommendations | Suggested next steps |
 
 ## Evidence model integration
 
