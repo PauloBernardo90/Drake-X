@@ -217,7 +217,21 @@ Primary Windows PE malware workflow:
 drake pe analyze ./sample.exe -w my-engagement --vt
 ```
 
-What v0.8 covers:
+Optional v0.9 workflows:
+
+```bash
+# AI-assisted exploit-aware assessment (local Ollama only)
+drake pe analyze ./sample.exe -w my-engagement --ai-exploit-assessment
+
+# Candidate detection artifacts for analyst review
+drake pe analyze ./sample.exe -w my-engagement --detection-output
+
+# Full v0.9 path
+drake pe analyze ./sample.exe -w my-engagement --vt \
+  --ai-exploit-assessment --detection-output
+```
+
+What v0.9 covers:
 
 - PE header parsing
 - sections, imports, exports, resources
@@ -225,7 +239,13 @@ What v0.8 covers:
 - protection status
 - import-risk classification
 - ATT&CK-linked findings
+- exploit-related indicator detection
+- suspected shellcode carving and bounded decoding for triage
+- protection-interaction assessment
 - technical and executive report output
+- Evidence Graph output as `pe_graph.json`
+- optional AI-assisted exploit-aware assessment with append-only audit log
+- optional candidate YARA and STIX outputs for analyst review
 
 Optional prerequisites:
 
@@ -238,6 +258,17 @@ Current bounded disassembly behavior:
 - limited to the entry-point region
 - stored as `entry_disasm.json`
 - off-graph by default
+
+Key PE output artifacts:
+
+- `pe_analysis.json` — structured analysis result
+- `pe_graph.json` — canonical Evidence Graph output for the sample
+- `pe_report.md` — technical report
+- `pe_executive.md` — executive summary
+- `entry_disasm.json` — bounded entry-point disassembly
+- `ai_audit/exploit_assessment.jsonl` — present only with `--ai-exploit-assessment`
+- `pe_candidates.yar` — present only with `--detection-output` when signals justify it
+- `pe_stix.json` — present only with `--detection-output`
 
 ## 10. Evidence and Graph
 
@@ -335,13 +366,16 @@ All optional tooling must degrade gracefully when unavailable.
 Current status:
 
 - v0.8 native foundations are in place
-- PE analysis is a first-class workflow
+- PE analysis is a first-class v0.9 workflow
+- bounded exploit-awareness is implemented for PE analysis
+- PE analysis writes the Evidence Graph as a canonical output
+- optional AI-assisted exploit-aware assessment is available with audit logging
+- optional candidate YARA and STIX outputs are available for analyst review
 - persistent console is available
 
 Next phase:
 
-- v0.9 exploit-awareness
-- suspected shellcode carving
-- exploit-related indicator heuristics
-- protection-interaction assessment
-- bounded AI-assisted exploit-aware assessment
+- v1.0 cross-sample correlation
+- richer graph query surfaces
+- dynamic evidence-ingestion adapters
+- broader multi-domain reporting and validation planning

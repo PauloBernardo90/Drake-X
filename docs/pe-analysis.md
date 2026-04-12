@@ -49,7 +49,7 @@ drake pe analyze sample.exe --deep
 
 # AI-assisted exploit assessment (requires local Ollama runtime)
 drake pe analyze sample.exe --ai-exploit-assessment \
-  --ollama-url http://127.0.0.1:11434 --ollama-model llama3.1:8b
+  --ollama-url http://127.0.0.1:11434 --ollama-model llama3.2:1b
 
 # Emit candidate YARA + STIX bundle for analyst review
 drake pe analyze sample.exe --detection-output

@@ -76,7 +76,7 @@ campaign-similarity assessments, external intelligence enrichments, and
 dynamic-validation hypotheses all converge into a shared evidence graph.
 
 **Malware analysis workflows.** APK analysis, Windows PE static analysis
-(v0.8), native binary inspection, VirusTotal correlation, Frida
+(v0.9), native binary inspection, VirusTotal correlation, Frida
 observation templates, Ghidra-backed deeper analysis, and evidence-linked
 reporting for analyst review.
 
