@@ -2,6 +2,7 @@
 
 Core guides:
 
+- [`drake-unleashed.md`](drake-unleashed.md) — structured onboarding and operator workflow guide
 - [`cheat-sheet.md`](cheat-sheet.md) — compact CLI command reference
 - [`usage.md`](usage.md) — end-to-end usage walkthrough
 - [`kali-setup.md`](kali-setup.md) — Kali Linux installation and setup

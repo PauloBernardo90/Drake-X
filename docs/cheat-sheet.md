@@ -1,223 +1,133 @@
 # Drake-X Cheat Sheet
 
-See also: [`README.md`](README.md), [`usage.md`](usage.md),
-[`kali-setup.md`](kali-setup.md), [`llm-setup.md`](llm-setup.md)
+See also: [`drake-unleashed.md`](drake-unleashed.md),
+[`usage.md`](usage.md), [`apk-analysis.md`](apk-analysis.md),
+[`pe-analysis.md`](pe-analysis.md), [`kali-setup.md`](kali-setup.md)
 
-Fast reference for the current Drake-X CLI. For v0.7, read the command
-surface with APK/malware analysis first and supporting collection
-second.
+Fast reference for the current Drake-X CLI. Use
+[`drake-unleashed.md`](drake-unleashed.md) for the structured workflow
+guide.
 
-## Basic Help
+## 1. Fast Start
 
 ```bash
 drake --help
-drake status -w <workspace>
 drake tools
-drake tools -w <workspace>
-drake flow
+drake init <workspace>
+drake ai status -w <workspace>
 ```
 
-## Primary Analysis Flow
+## 2. Persistent Console
+
+```bash
+drake console
+```
+
+Inside the console:
+
+```text
+workspace list
+workspace use <workspace>
+workspace new <workspace>
+workspace show
+session list
+session use <session-id>
+session show
+status
+tools
+exit
+```
+
+## 3. Workspace and Scope
 
 ```bash
 drake init <workspace>
-drake ai status -w <workspace>
-drake apk analyze ./sample.apk -w <workspace> --vt --ghidra
-drake graph show <session-id> -w <workspace> --format summary
-drake report generate <session-id> -f md -w <workspace>
-```
-
-## Workspace
-
-Create a workspace under `~/.drake-x/workspaces/`:
-
-```bash
-drake init <name>
-drake init <name> --operator <operator>
-drake init <name> --force
-```
-
-Create a workspace under the current directory:
-
-```bash
-drake init <name> --here
-```
-
-Quick status view:
-
-```bash
+drake init <workspace> --operator <operator>
+drake init <workspace> --here
 drake status -w <workspace>
-```
-
-## Scope
-
-```bash
 drake scope validate -w <workspace>
 drake scope show -w <workspace>
-drake scope show -w <workspace> --json
 drake scope check <target> -w <workspace>
 ```
 
-## Supporting Recon
-
-List modules:
-
-```bash
-drake recon list-modules
-```
-
-Plan a run:
-
-```bash
-drake recon plan <target> -m recon_passive -w <workspace>
-drake recon plan <target> -m recon_active -w <workspace>
-```
-
-Run a module:
-
-```bash
-drake recon run <target> -m recon_passive -w <workspace>
-drake recon run <target> -m recon_active -w <workspace>
-drake recon run <target> -m recon_active -w <workspace> --yes
-drake recon run <target> -m recon_active -w <workspace> --dry-run
-drake recon run <target> -m recon_passive -w <workspace> --ai
-drake recon run <target> -m recon_passive -w <workspace> --timeout 120
-```
-
-Common modules:
+Common paths:
 
 ```text
-recon_passive
-recon_active
-web_inspect
-tls_inspect
-headers_audit
-content_discovery
-api_inventory
+~/.drake-x/workspaces/<workspace>/
+  workspace.toml
+  scope.yaml
+  drake.db
+  runs/
+  audit.log
 ```
 
-## Supporting Web
-
-Shortcut for `web_inspect`:
+## 4. APK Fast Path
 
 ```bash
-drake web inspect <url-or-domain> -w <workspace>
-drake web inspect <url-or-domain> -w <workspace> --yes
-drake web inspect <url-or-domain> -w <workspace> --dry-run
-drake web inspect <url-or-domain> -w <workspace> --ai
-```
-
-## API
-
-Ingest an OpenAPI or Swagger file:
-
-```bash
-drake api ingest ./openapi.json -w <workspace>
-drake api ingest ./openapi.yaml -w <workspace> --target https://api.example.com
-```
-
-## APK / Malware Analysis
-
-Static analysis:
-
-```bash
-drake apk analyze ./sample.apk
 drake apk analyze ./sample.apk -w <workspace>
-drake apk analyze ./sample.apk -o ./apk-output
 drake apk analyze ./sample.apk -w <workspace> --vt
 drake apk analyze ./sample.apk -w <workspace> --ghidra
 drake apk analyze ./sample.apk -w <workspace> --vt --ghidra
-drake apk analyze ./sample.apk --radare2
-drake apk analyze ./sample.apk --no-jadx
-drake apk analyze ./sample.apk --deep
-drake apk analyze ./sample.apk -w <workspace> --vt --ghidra --radare2 --deep
+drake apk analyze ./sample.apk -w <workspace> --deep
 ```
 
-VirusTotal enrichment:
+VirusTotal configuration:
 
 ```toml
 [virustotal]
 api_key = "YOUR_VT_API_KEY"
 ```
 
-Store the VirusTotal API key in the workspace config at
-`~/.drake-x/workspaces/<workspace>/workspace.toml`.
-Do not hardcode secrets in the repository or source files.
-
 Environment fallback:
 
 ```bash
 export VT_API_KEY="your_vt_api_key"
-drake apk analyze ./sample.apk -w <workspace> --vt
 ```
 
 Resolution order:
 1. `[virustotal].api_key` in `workspace.toml`
 2. `VT_API_KEY` environment variable
 
-## PE / Windows Malware Analysis
-
-Static analysis (v0.8):
+## 5. PE Fast Path
 
 ```bash
-drake pe analyze ./sample.exe
 drake pe analyze ./sample.exe -w <workspace>
 drake pe analyze ./sample.dll -w <workspace> --vt
-drake pe analyze ./sample.exe --deep
+drake pe analyze ./sample.exe -w <workspace> --deep
 ```
 
-Outputs: `pe_analysis.json`, `pe_report.md`, `pe_executive.md`,
-`entry_disasm.json` (if Capstone available).
-
-Prerequisites (optional, degrade gracefully):
+Optional prerequisites:
 
 ```bash
 pip install pefile capstone
 ```
 
-## Findings
+Primary outputs:
+
+```text
+pe_analysis.json
+pe_report.md
+pe_executive.md
+entry_disasm.json
+```
+
+## 6. Sessions and Reports
 
 ```bash
+drake report list -w <workspace>
 drake findings list -w <workspace>
-drake findings list -w <workspace> --severity medium
-drake findings list -w <workspace> --source parser
 drake findings show <finding-id> -w <workspace>
-```
-
-## Evidence Graph
-
-Show graph:
-
-```bash
-drake graph show <session-id> -w <workspace>
-```
-
-Useful filters:
-
-```bash
-drake graph show <session-id> -w <workspace> --format ascii
-drake graph show <session-id> -w <workspace> --format json
 drake graph show <session-id> -w <workspace> --format summary
-drake graph show <session-id> -w <workspace> --node <node-id>
-drake graph show <session-id> -w <workspace> --kind finding
-drake graph show <session-id> -w <workspace> --edge supports
-drake graph show <session-id> -w <workspace> --findings
-drake graph show <session-id> -w <workspace> --indicators
-drake graph show <session-id> -w <workspace> --artifacts
-drake graph show <session-id> -w <workspace> -o ./graph.txt
+drake report generate <session-id> -f md -w <workspace>
+drake report generate <session-id> -f executive -w <workspace>
+drake report generate <session-id> -f json -w <workspace>
+drake report diff <session-a> <session-b> -w <workspace>
 ```
 
-## AI / Analyst Assistance
-
-Check Ollama connectivity:
+## 7. AI Tasks
 
 ```bash
 drake ai status -w <workspace>
-```
-
-Run tasks against a stored session:
-
-```bash
 drake ai summarize <session-id> -w <workspace>
 drake ai classify <session-id> -w <workspace>
 drake ai next-steps <session-id> -w <workspace>
@@ -227,98 +137,35 @@ drake ai dedupe <session-id> -w <workspace>
 drake ai dedupe <session-id> -w <workspace> --apply
 ```
 
-## Reports
+## 8. Supporting Collection
 
-List sessions available for reporting:
+Supporting evidence-gathering remains available, but is not the primary
+product workflow.
 
 ```bash
+drake recon list-modules
+drake recon plan <target> -m recon_passive -w <workspace>
+drake recon run <target> -m recon_passive -w <workspace>
+drake web inspect <url-or-domain> -w <workspace>
+drake api ingest ./openapi.json -w <workspace>
+```
+
+## 9. Common Investigation Sequences
+
+APK triage:
+
+```bash
+drake apk analyze ./sample.apk -w <workspace> --vt --ghidra
 drake report list -w <workspace>
-```
-
-Generate reports:
-
-```bash
-drake report generate <session-id> -f md -w <workspace>
+drake ai summarize <session-id> -w <workspace>
 drake report generate <session-id> -f executive -w <workspace>
-drake report generate <session-id> -f json -w <workspace>
-drake report generate <session-id> -f manifest -w <workspace>
-drake report generate <session-id> -f evidence -w <workspace>
-drake report generate <session-id> -f md -w <workspace> -o ./report.md
 ```
 
-Compare sessions:
+PE triage:
 
 ```bash
-drake report diff <session-a> <session-b> -w <workspace>
+drake pe analyze ./sample.exe -w <workspace> --vt
+drake report list -w <workspace>
+drake graph show <session-id> -w <workspace> --format summary
+drake report generate <session-id> -f md -w <workspace>
 ```
-
-## Missions
-
-Built-in multi-step workflows:
-
-```bash
-drake mission list -w <workspace>
-drake mission show <mission> -w <workspace>
-drake mission run apk ./sample.apk -w <workspace>
-drake mission run recon <target> -w <workspace>
-drake mission run web <target> -w <workspace>
-drake mission run full <target> -w <workspace>
-```
-
-Useful options:
-
-```bash
-drake mission run web <target> -w <workspace> --yes
-drake mission run web <target> -w <workspace> --dry-run
-drake mission run web <target> -w <workspace> --no-active
-drake mission run web <target> -w <workspace> --ai
-drake mission run web <target> -w <workspace> --no-report
-drake mission run apk ./sample.apk -w <workspace> -o ./mission-output
-```
-
-## Assist
-
-AI-guided operator mode:
-
-```bash
-drake assist start web <target> -w <workspace>
-drake assist start recon <target> -w <workspace>
-drake assist start apk <target> -w <workspace>
-drake assist start web <target> -w <workspace> --max-steps 10
-```
-
-Audit trail:
-
-```bash
-drake assist history <assist-session-id> -w <workspace>
-drake assist export <assist-session-id> -w <workspace>
-```
-
-## Common Setup Flow
-
-```bash
-drake init my-engagement
-mousepad ~/.drake-x/workspaces/my-engagement/scope.yaml &
-drake scope validate -w my-engagement
-drake scope check example.com -w my-engagement
-drake recon run example.com -m recon_passive -w my-engagement
-drake ai status -w my-engagement
-drake report generate <session-id> -f md -w my-engagement
-```
-
-## Ollama Workspace Config
-
-Example `workspace.toml` section:
-
-```toml
-[ai]
-ollama_url = "http://127.0.0.1:11434"
-ollama_model = "llama3.2:1b"
-```
-
-## Notes
-
-- Prefer `-w <workspace>` consistently.
-- Active modules require valid scope and may require confirmation.
-- `drake ai ...` works on stored session IDs, not arbitrary targets.
-- `drake report generate` writes under the workspace run directory unless `-o` is used.
