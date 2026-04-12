@@ -14,9 +14,9 @@ class ClassifyTask(AITask):
                 "observation": "string",
                 "severity": "info | low | medium | high | critical",
                 "confidence": "low | medium | high",
-                "cwe": ["CWE-XXX"],
-                "owasp": ["A0X:YYYY"],
-                "mitre_attck": ["TXXXX"],
+                "cwe": ["CWE-79"],
+                "owasp": ["A03:2021"],
+                "mitre_attck": ["T1059"],
                 "rationale": "string",
             }
         ]
