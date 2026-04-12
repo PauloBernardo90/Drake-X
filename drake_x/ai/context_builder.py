@@ -129,7 +129,20 @@ def build_pe_exploit_context(
 
     included_ids = sorted({n["id"] for n in graph_ctx.get("nodes", [])})
     total_seed_nodes = len(deduped_seeds)
-    if len(included_ids) < total_seed_nodes:
+
+    # Attribute truncation to the correct limiter. ``serialize_graph_context``
+    # sets ``truncated: True`` on the returned dict when the char-budget
+    # fallback (``_enforce_char_budget``) collapses to a minimal view
+    # — that is the signal that ``max_chars`` was the binding constraint.
+    # Otherwise, if fewer seeds made it through than we started with,
+    # ``max_nodes`` was the limiter.
+    if graph_ctx.get("truncated") is True:
+        truncation.append(
+            f"graph truncated: char budget exhausted "
+            f"(max_chars={max_chars}); "
+            f"{len(included_ids)}/{total_seed_nodes} seed nodes retained"
+        )
+    elif len(included_ids) < total_seed_nodes:
         truncation.append(
             f"graph truncated: {len(included_ids)}/{total_seed_nodes} "
             f"seed nodes retained (max_nodes={max_nodes})"

@@ -77,10 +77,28 @@ def section_id(sha256: str, section_name: str, ordinal: int = 0) -> str:
     return f"pe:{_short_sha(sha256)}:section:{safe or 'unnamed'}:{int(ordinal)}"
 
 
-def import_id(sha256: str, dll: str, function: str) -> str:
+def import_id(
+    sha256: str, dll: str, function: str, ordinal: int | None = None
+) -> str:
+    """Deterministic ID for a PE import node.
+
+    Named imports are keyed on ``(dll, function)`` — for any real PE,
+    that tuple is unique within the import table. Ordinal-only imports
+    (no function name) were previously collapsed onto a single
+    ``<dll>:ordinal`` ID, silently discarding every ordinal-only
+    import after the first. v0.9 hardening keys ordinal-only imports
+    on their ordinal: ``<dll>:ord:<N>``.
+
+    ``ordinal`` is optional and only consulted when ``function`` is
+    empty, so existing callers that pass just ``(sha, dll, function)``
+    for named imports continue to produce the same IDs.
+    """
     safe_dll = dll.lower().replace(" ", "_")
-    safe_func = function or "ordinal"
-    return f"pe:{_short_sha(sha256)}:import:{safe_dll}:{safe_func}"
+    if function:
+        return f"pe:{_short_sha(sha256)}:import:{safe_dll}:{function}"
+    # ordinal-only import — disambiguate by ordinal
+    ord_key = str(ordinal) if ordinal is not None else "unknown"
+    return f"pe:{_short_sha(sha256)}:import:{safe_dll}:ord:{ord_key}"
 
 
 def protection_id(sha256: str, protection: str) -> str:
@@ -194,11 +212,12 @@ def _ingest_imports(graph: EvidenceGraph, result: PeAnalysisResult, root: str) -
         risk_map[(f.get("dll", ""), f.get("function", ""))] = f
 
     for imp in result.imports:
-        nid = import_id(sha, imp.dll, imp.function)
+        nid = import_id(sha, imp.dll, imp.function, ordinal=imp.ordinal)
         risk = risk_map.get((imp.dll, imp.function))
         data: dict[str, Any] = {
             "dll": imp.dll,
             "function": imp.function,
+            "ordinal": imp.ordinal,
         }
         if risk:
             data["risk"] = risk.get("risk")

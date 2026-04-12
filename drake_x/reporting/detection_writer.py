@@ -34,6 +34,13 @@ from ..models.pe import PeAnalysisResult
 # the AI audit log; it does not need to live inside the STIX bundle.
 _STIX_TIMESTAMP_SENTINEL = "1970-01-01T00:00:00+00:00"
 
+# YARA rule ``meta.generated_at`` was previously the current UTC date,
+# which made identical analyses produce different YARA output across
+# day boundaries. For the same reproducibility reasons we freeze this
+# to a documented sentinel. Real generation time belongs in the
+# workspace manifest.
+_YARA_GENERATED_AT_SENTINEL = "1970-01-01"
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -52,7 +59,8 @@ def render_pe_yara_candidates(result: PeAnalysisResult) -> str:
     rules: list[str] = []
     sha = result.metadata.sha256 or "unknown"
     short = sha[:16]
-    timestamp = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y-%m-%d")
+    # Frozen sentinel — see _YARA_GENERATED_AT_SENTINEL docstring.
+    timestamp = _YARA_GENERATED_AT_SENTINEL
 
     # ---- Shellcode-derived candidates ---------------------------------
     for i, sc in enumerate(result.suspected_shellcode):

@@ -9,6 +9,7 @@ from pathlib import Path
 import typer
 
 from ..cli_theme import error, info, make_console, success, warn
+from ..constants import DEFAULT_OLLAMA_MODEL
 from ..modules.pe_analyze import (
     attach_graph_snapshot,
     build_graph,
@@ -47,9 +48,10 @@ def analyze(
         help="Base URL for a local Ollama runtime (AI-assisted features only).",
     ),
     ollama_model: str = typer.Option(
-        "llama3.1:8b",
+        DEFAULT_OLLAMA_MODEL,
         "--ollama-model",
-        help="Ollama model to use for AI-assisted tasks.",
+        help="Ollama model to use for AI-assisted tasks. Defaults to the "
+             "project-wide DEFAULT_OLLAMA_MODEL (see drake_x.constants).",
     ),
 ) -> None:
     """Run static analysis on a Windows PE file (.exe or .dll).

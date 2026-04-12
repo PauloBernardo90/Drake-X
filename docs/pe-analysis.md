@@ -125,15 +125,26 @@ A v0.9 PE run produces, in the work directory:
 - Output stored as structured JSON artifact (`entry_disasm.json`)
 - Architecture-aware: x86 (32-bit) and x86-64 (64-bit)
 
-**Important:** The v0.8 bounded disassembly operates on the entry-point
-region, not on individual function boundaries. It captures the initial
+**Important:** Bounded disassembly operates on the entry-point region,
+not on individual function boundaries. It captures the initial
 execution path to support analyst triage. Function-scoped disassembly
-is planned for v0.9.
+is planned for v1.0 and will be driven by the Ghidra-structured export
+pipeline rather than an expanded Capstone path.
 
 ### Phase 5 — Reporting
-- Technical Markdown report (10 sections)
-- Executive summary
-- Structured JSON output
+- Technical Markdown report; sections expand dynamically with
+  evidence (executive summary, methodology, surface, PE metadata,
+  sections, imports, protections, structural anomalies, behavioral
+  signals, exploit-capability assessment, suspected shellcode,
+  protection-interaction, AI-assisted assessment when present,
+  and validation recommendations).
+- Executive summary.
+- Structured JSON output (`pe_analysis.json`, includes embedded
+  evidence-graph snapshot).
+- Evidence Graph (`pe_graph.json`).
+- Optional AI audit log (`ai_audit/exploit_assessment.jsonl`) and
+  candidate detection outputs (`pe_candidates.yar`, `pe_stix.json`)
+  when the relevant CLI flags are set.
 
 ## Output structure
 

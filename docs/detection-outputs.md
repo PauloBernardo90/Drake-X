@@ -28,6 +28,25 @@ Analysts must tune, corpus-test, and sign off on rules before using
 them operationally. Drake-X does not claim false-positive or
 false-negative rates for generated rules.
 
+## Reproducibility
+
+Both YARA and STIX outputs are byte-reproducible for identical input:
+
+- **STIX.** All UUIDs (bundle, indicator, relationship) are derived via
+  `uuid5(NAMESPACE_OID, ...)` over stable inputs. All STIX timestamp
+  fields (`created`, `modified`, `valid_from`, `generated_at`) are
+  frozen to the sentinel `1970-01-01T00:00:00+00:00`. The bundle
+  carries an `x_drake_x.reproducibility_note` pointing to the
+  workspace manifest for the real generation time.
+- **YARA.** The `meta.generated_at` field on every candidate rule is
+  frozen to the sentinel `1970-01-01`. Real generation time is
+  recorded in the workspace manifest; the YARA text stays stable
+  across day boundaries and across re-runs.
+
+Downstream consumers that require wall-clock timestamps must read the
+workspace manifest and stamp real time at egress rather than trust
+the sentinel.
+
 ## YARA output
 
 - Rules are named `Drake_Candidate_<category>_<shortsha>_<n>`.

@@ -4,9 +4,17 @@ Drake-X is evidence-first. That discipline must extend to the AI layer:
 every LLM call has to be reproducible and inspectable by the operator
 who ran it. v0.9 introduces the audit primitives required.
 
+## Current scope (v0.9)
+
+Audit logging is wired for the **PE exploit-assessment task**
+(`drake pe analyze --ai-exploit-assessment`). The generic `drake ai …`
+command family does not yet audit; extension to all AI task entry
+points is scheduled for v1.0. Do not assume an AI answer came through
+an audited path unless it was produced by the PE path.
+
 ## What is recorded
 
-Every AI task invocation writes one line to
+Each audited AI task invocation writes one line to
 `<work_dir>/ai_audit/<task>.jsonl`. Each line is a JSON object with:
 
 - `task` — task name (e.g. `exploit_assessment`)
