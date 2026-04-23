@@ -17,5 +17,17 @@ This package provides:
 from .hashing import compute_file_hashes, SampleIdentity
 from .chain import CustodyChain
 from .verifier import IntegrityVerifier
+from .ledger import IntegrityLedger
+from .signing import sign_file, verify_signature
+from .stix_bundle import render_provenance_stix
 
-__all__ = ["compute_file_hashes", "SampleIdentity", "CustodyChain", "IntegrityVerifier"]
+__all__ = [
+    "compute_file_hashes",
+    "SampleIdentity",
+    "CustodyChain",
+    "IntegrityVerifier",
+    "IntegrityLedger",
+    "sign_file",
+    "verify_signature",
+    "render_provenance_stix",
+]

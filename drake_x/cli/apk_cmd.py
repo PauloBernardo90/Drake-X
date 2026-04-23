@@ -38,6 +38,10 @@ def analyze(
     dex_deep: bool = typer.Option(False, "--dex-deep", help="Run DEX deep disassembly and semantic extraction."),
     sandbox: bool = typer.Option(False, "--sandbox", help="Run extraction tools inside sandbox (requires firejail or docker)."),
     sandbox_backend: str = typer.Option("firejail", "--sandbox-backend", help="Sandbox backend: firejail, docker."),
+    sign_integrity: bool = typer.Option(False, "--sign-integrity", help="GPG-sign the integrity report (requires gpg)."),
+    signing_key: str = typer.Option("", "--signing-key", help="GPG key ID/fingerprint for signing (uses default if empty)."),
+    stix_provenance: bool = typer.Option(False, "--stix-provenance", help="Generate STIX 2.1 provenance bundle from integrity report."),
+    ledger: bool = typer.Option(False, "--ledger", help="Append to append-only SQLite ledger (workspace/integrity_ledger.db)."),
     vt: bool = typer.Option(False, "--vt", help="Enable VirusTotal hash lookup (requires API key in workspace config)."),
 ) -> None:
     """Run static analysis on an Android APK file.
@@ -89,7 +93,7 @@ def analyze(
     from ..integrity.chain import CustodyChain
     from ..integrity.models import CustodyAction, ExecutionContext
     from ..integrity.versioning import capture_version_info
-    from ..integrity.reporting import build_integrity_report, write_integrity_report
+    from ..integrity.reporting import build_integrity_report, finalize_integrity_outputs
 
     sample_identity = compute_file_hashes(apk_file)
     exec_ctx = ExecutionContext(sample_sha256=sample_identity.sha256, analysis_mode="apk_analyze")
@@ -295,6 +299,24 @@ def analyze(
         execution_context=exec_ctx,
         version_info=version_info,
     )
-    integrity_path = work_dir / "integrity_report.json"
-    write_integrity_report(integrity_report, integrity_path)
-    info(console, f"integrity:     [accent]{integrity_path}[/accent] ({'PASS' if integrity_report.verified else 'FAIL'})")
+    ledger_path = (work_dir.parent / "integrity_ledger.db") if ledger else None
+    outputs = finalize_integrity_outputs(
+        integrity_report,
+        work_dir,
+        sign=sign_integrity,
+        signing_key=signing_key,
+        write_stix=stix_provenance,
+        ledger_path=ledger_path,
+    )
+    info(console, f"integrity:     [accent]{outputs.get('integrity_report')}[/accent] "
+         f"({'PASS' if integrity_report.verified else 'FAIL'})")
+    if outputs.get("signature"):
+        info(console, f"signature:     [accent]{outputs['signature']}[/accent] (key: {outputs.get('signing_key', 'default')})")
+    elif sign_integrity:
+        warn(console, f"signature:     {outputs.get('signature_error', 'signing failed')}")
+    if outputs.get("stix_provenance"):
+        info(console, f"STIX provenance: [accent]{outputs['stix_provenance']}[/accent]")
+    if outputs.get("ledger"):
+        info(console, f"ledger:        [accent]{outputs['ledger']}[/accent]")
+    elif outputs.get("ledger_error"):
+        warn(console, f"ledger:        {outputs['ledger_error']}")

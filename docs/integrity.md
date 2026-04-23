@@ -173,6 +173,73 @@ IntegrityVerifier().verify(report)  # raises on failure
 }
 ```
 
+## Optional Integrity Outputs
+
+In addition to the default `integrity_report.json`, three optional
+outputs can be enabled per run:
+
+### 1. GPG Signature (`--sign-integrity`)
+
+Produces a detached ASCII-armored signature (`integrity_report.json.asc`)
+using the operator's GPG keychain. Signing is optional — missing `gpg`
+does not break the pipeline, it just skips signing.
+
+```bash
+drake apk analyze sample.apk --sign-integrity
+drake apk analyze sample.apk --sign-integrity --signing-key 0xABCDEF12
+```
+
+Verify later with:
+
+```python
+from drake_x.integrity.signing import verify_signature
+ok, details = verify_signature(Path("integrity_report.json"),
+                               Path("integrity_report.json.asc"))
+```
+
+### 2. STIX 2.1 Provenance Bundle (`--stix-provenance`)
+
+Converts the integrity report into a STIX 2.1 bundle with
+`identity`, `file`, `process`, `note`, and `relationship` objects.
+Timestamps are frozen for reproducibility.
+
+```bash
+drake apk analyze sample.apk --stix-provenance
+# → integrity_provenance.stix.json
+```
+
+### 3. Append-Only Ledger (`--ledger`)
+
+Persists custody events, integrity reports, and verification results
+to a SQLite database in WAL mode. Each entry includes the hash of
+the previous entry, creating a linked-hash chain.
+
+```bash
+drake apk analyze sample.apk --ledger
+# → integrity_ledger.db (in workspace root)
+```
+
+Verify the ledger chain:
+
+```python
+from drake_x.integrity import IntegrityLedger
+ledger = IntegrityLedger(Path("integrity_ledger.db"))
+violations = ledger.verify_chain()
+assert violations == []  # fail-closed
+```
+
+### Combine All
+
+```bash
+drake apk analyze sample.apk \
+    --sign-integrity \
+    --stix-provenance \
+    --ledger
+```
+
+All three options are also available on `drake pe analyze` and
+`drake elf analyze`.
+
 ## Module Architecture
 
 ```
@@ -184,7 +251,10 @@ drake_x/integrity/
 ├── chain.py          # CustodyChain append-only event log
 ├── verifier.py       # Fail-closed integrity checker
 ├── versioning.py     # Pipeline + tool version capture
-└── reporting.py      # IntegrityReport builder
+├── reporting.py      # IntegrityReport builder + finalize outputs
+├── signing.py        # GPG detached signatures
+├── ledger.py         # Append-only SQLite WAL linked-hash ledger
+└── stix_bundle.py    # STIX 2.1 provenance bundle generator
 ```
 
 ## Limitations

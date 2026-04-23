@@ -93,3 +93,65 @@ def write_integrity_report(
     output_path.write_text(content, encoding="utf-8")
     log.info("Integrity report written to %s", output_path)
     return output_path
+
+
+def finalize_integrity_outputs(
+    report: IntegrityReport,
+    output_dir: Path,
+    *,
+    sign: bool = False,
+    signing_key: str = "",
+    write_stix: bool = False,
+    ledger_path: Path | None = None,
+) -> dict[str, str]:
+    """Write all integrity-related outputs: JSON report, signature, STIX, ledger.
+
+    Returns a dict mapping output kind → path (or status message).
+    """
+    output_dir = Path(output_dir)
+    outputs: dict[str, str] = {}
+
+    # 1. Write the integrity report JSON
+    report_path = output_dir / "integrity_report.json"
+    write_integrity_report(report, report_path)
+    outputs["integrity_report"] = str(report_path)
+
+    # 2. Optional GPG signing
+    if sign:
+        from .signing import sign_file
+        sig_result = sign_file(report_path, key_id=signing_key)
+        if sig_result.signed:
+            outputs["signature"] = sig_result.signature_path
+            outputs["signing_key"] = sig_result.key_fingerprint or "default"
+        else:
+            outputs["signature_error"] = sig_result.error
+
+    # 3. Optional STIX provenance bundle
+    if write_stix:
+        from .stix_bundle import render_provenance_stix
+        stix_text = render_provenance_stix(report)
+        if stix_text:
+            stix_path = output_dir / "integrity_provenance.stix.json"
+            stix_path.write_text(stix_text, encoding="utf-8")
+            outputs["stix_provenance"] = str(stix_path)
+
+    # 4. Optional ledger append
+    if ledger_path is not None:
+        from .ledger import IntegrityLedger
+        try:
+            ledger = IntegrityLedger(ledger_path)
+            for event in report.custody_events:
+                ledger.append_custody_event(event)
+            ledger.append_integrity_report(report)
+            ledger.append_verification(
+                run_id=report.run_id,
+                verified=report.verified,
+                timestamp=report.generated_at,
+                details={"errors": report.verification_errors},
+            )
+            outputs["ledger"] = str(ledger_path)
+        except Exception as exc:  # noqa: BLE001
+            outputs["ledger_error"] = str(exc)
+            log.warning("Ledger append failed: %s", exc)
+
+    return outputs

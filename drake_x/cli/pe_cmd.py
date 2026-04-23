@@ -44,6 +44,10 @@ def analyze(
     ),
     sandbox: bool = typer.Option(False, "--sandbox", help="Run extraction tools inside sandbox."),
     sandbox_backend: str = typer.Option("firejail", "--sandbox-backend", help="Sandbox backend: firejail, docker."),
+    sign_integrity: bool = typer.Option(False, "--sign-integrity", help="GPG-sign the integrity report (requires gpg)."),
+    signing_key: str = typer.Option("", "--signing-key", help="GPG key ID/fingerprint."),
+    stix_provenance: bool = typer.Option(False, "--stix-provenance", help="Generate STIX 2.1 provenance bundle."),
+    ledger: bool = typer.Option(False, "--ledger", help="Append to integrity ledger (SQLite WAL)."),
     ollama_url: str = typer.Option(
         "http://127.0.0.1:11434",
         "--ollama-url",
@@ -94,6 +98,19 @@ def analyze(
         if not vt_api_key:
             warn(console, "--vt requested but no API key available")
 
+    # --- Integrity: hash sample and start custody chain ---
+    from ..integrity.hashing import compute_file_hashes
+    from ..integrity.chain import CustodyChain
+    from ..integrity.models import CustodyAction, ExecutionContext
+    from ..integrity.versioning import capture_version_info
+    from ..integrity.reporting import build_integrity_report, finalize_integrity_outputs
+
+    sample_identity = compute_file_hashes(pe_file)
+    exec_ctx = ExecutionContext(sample_sha256=sample_identity.sha256, analysis_mode="pe_analyze")
+    chain = CustodyChain(run_id=exec_ctx.run_id, sample_sha256=sample_identity.sha256)
+    chain.record(CustodyAction.INGEST, actor="pe_cmd", details=f"Ingested {pe_file.name}")
+    chain.register_artifact(artifact_type="pe_original", file_path=pe_file, sha256=sample_identity.sha256)
+
     # Run analysis
     try:
         result = run_analysis(
@@ -102,7 +119,9 @@ def analyze(
             deep=deep,
             vt_api_key=vt_api_key,
         )
+        chain.record(CustodyAction.ANALYZE, actor="pe_analyze", details="Analysis completed")
     except Exception as exc:
+        chain.record_failure(actor="pe_analyze", details=str(exc))
         error(console, f"analysis failed: {exc}")
         raise typer.Exit(code=1) from exc
 
@@ -211,10 +230,44 @@ def analyze(
     md_path = work_dir / "pe_report.md"
     md_path.write_text(render_pe_markdown(result), encoding="utf-8")
     info(console, f"report:        [accent]{md_path}[/accent]")
+    chain.record(CustodyAction.REPORT_GENERATE, actor="report_writer", details="Markdown report")
+    chain.register_artifact(artifact_type="report_md", file_path=md_path)
 
     exec_path = work_dir / "pe_executive.md"
     exec_path.write_text(render_pe_executive(result), encoding="utf-8")
     info(console, f"executive:     [accent]{exec_path}[/accent]")
+
+    # Register JSON output as artifact
+    chain.register_artifact(artifact_type="report_json", file_path=json_path)
+
+    # --- Integrity: generate integrity report ---
+    version_info = capture_version_info(analysis_profile="pe_analyze")
+    exec_ctx.version_info = version_info
+    integrity_report = build_integrity_report(
+        sample_identity=sample_identity,
+        chain=chain,
+        execution_context=exec_ctx,
+        version_info=version_info,
+    )
+    ledger_path = (work_dir.parent / "integrity_ledger.db") if ledger else None
+    outputs = finalize_integrity_outputs(
+        integrity_report,
+        work_dir,
+        sign=sign_integrity,
+        signing_key=signing_key,
+        write_stix=stix_provenance,
+        ledger_path=ledger_path,
+    )
+    info(console, f"integrity:     [accent]{outputs.get('integrity_report')}[/accent] "
+         f"({'PASS' if integrity_report.verified else 'FAIL'})")
+    if outputs.get("signature"):
+        info(console, f"signature:     [accent]{outputs['signature']}[/accent]")
+    elif sign_integrity:
+        warn(console, f"signature:     {outputs.get('signature_error', 'signing failed')}")
+    if outputs.get("stix_provenance"):
+        info(console, f"STIX provenance: [accent]{outputs['stix_provenance']}[/accent]")
+    if outputs.get("ledger"):
+        info(console, f"ledger:        [accent]{outputs['ledger']}[/accent]")
 
     # ------------------------------------------------------------------
     # v0.9 — Optional detection artifact emission
