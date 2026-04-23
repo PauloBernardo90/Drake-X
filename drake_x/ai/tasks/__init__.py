@@ -15,6 +15,7 @@ either a structured result or ``None`` (degraded gracefully).
 from .apk_assessment import ApkAssessmentTask
 from .apk_campaign import ApkCampaignTask
 from .apk_obfuscation import ApkObfuscationTask
+from .dex_assessment import DexAssessmentTask
 from .assist_suggest import AssistSuggestTask
 from .base import AITask, AITaskResult, TaskContext
 from .classify import ClassifyTask
@@ -34,6 +35,7 @@ ALL_TASKS = (
     ApkAssessmentTask,
     ApkObfuscationTask,
     ApkCampaignTask,
+    DexAssessmentTask,
     AssistSuggestTask,
 )
 
@@ -50,6 +52,7 @@ __all__ = [
     "ApkAssessmentTask",
     "ApkObfuscationTask",
     "ApkCampaignTask",
+    "DexAssessmentTask",
     "AssistSuggestTask",
     "ALL_TASKS",
 ]

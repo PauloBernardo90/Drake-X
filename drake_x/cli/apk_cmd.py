@@ -121,6 +121,33 @@ def analyze(
             apk_name=result.metadata.package_name or apk_file.name,
         )
 
+        # YARA candidate rules
+        from ..reporting.dex_detection_writer import render_dex_yara_candidates, render_dex_stix_bundle, correlate_dex_with_vt
+        yara_text = render_dex_yara_candidates(result.dex_analysis, sha256=result.metadata.sha256)
+        if yara_text:
+            yara_path = work_dir / "dex_candidates.yar"
+            yara_path.write_text(yara_text, encoding="utf-8")
+            info(console, f"YARA:          [accent]{yara_path}[/accent]")
+
+        # STIX bundle
+        stix_text = render_dex_stix_bundle(
+            result.dex_analysis,
+            sha256=result.metadata.sha256,
+            md5=result.metadata.md5,
+            file_size=result.metadata.file_size,
+        )
+        if stix_text:
+            stix_path = work_dir / "dex_stix_bundle.json"
+            stix_path.write_text(stix_text, encoding="utf-8")
+            info(console, f"STIX:          [accent]{stix_path}[/accent]")
+
+        # VT correlation
+        if result.vt_enrichment.available:
+            vt_data = result.vt_enrichment.model_dump()
+            correlations = correlate_dex_with_vt(result.dex_analysis, vt_data)
+            if correlations:
+                info(console, f"VT×DEX:        {len(correlations)} correlation(s) found")
+
     graph_path = work_dir / "evidence_graph.json"
     graph_path.write_text(graph.to_json(indent=2), encoding="utf-8")
 

@@ -377,6 +377,28 @@ def _sec_dex_deep(lines: list[str], r: ApkAnalysisResult) -> None:
         lines.append(f"### Call Graph\n\n**{len(da.call_edges):,}** call edges extracted.")
         lines.append("")
 
+    # VT correlation (if VT enrichment is available)
+    if r.vt_enrichment.available and r.vt_enrichment.detections > 0:
+        from .dex_detection_writer import correlate_dex_with_vt
+        correlations = correlate_dex_with_vt(da, r.vt_enrichment.model_dump())
+        if correlations:
+            lines.append("### VT × DEX Correlations")
+            lines.append("")
+            for c in correlations:
+                lines.append(f"- **{c['type']}** (conf: {c['confidence']:.0%}): {c['description']}")
+            lines.append("")
+
+    # Detection outputs note
+    api_count = len([h for h in da.sensitive_api_hits if h.confidence >= 0.7 and h.severity.value in ("high", "critical")])
+    ioc_count = len([s for s in da.classified_strings if s.is_potential_ioc and s.confidence >= 0.7])
+    if api_count >= 2 or ioc_count >= 2:
+        lines.append("### Detection Outputs")
+        lines.append("")
+        lines.append("Candidate YARA rules and STIX indicators were generated from DEX ")
+        lines.append("findings. See `dex_candidates.yar` and `dex_stix_bundle.json` in ")
+        lines.append("the output directory. **All outputs are candidates requiring analyst review.**")
+        lines.append("")
+
     # Tools and phases
     lines.append(f"**Tools used:** {', '.join(da.tools_used) or 'none'}")
     if da.tools_skipped:
