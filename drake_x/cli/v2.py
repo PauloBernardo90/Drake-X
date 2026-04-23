@@ -31,6 +31,7 @@ from . import (
     pe_cmd,
     recon_cmd,
     report_cmd,
+    sandbox_cmd,
     scope_cmd,
     status_cmd,
     tools_cmd,
@@ -85,6 +86,7 @@ app.add_typer(correlate_cmd.app, name="correlate")
 app.add_typer(ingest_cmd.app, name="ingest")
 app.add_typer(validate_cmd.app, name="validate")
 app.add_typer(elf_cmd.app, name="elf")
+app.add_typer(sandbox_cmd.app, name="sandbox")
 
 # Console is imported lazily to avoid circular import (console_cmd
 # imports v2.app for command dispatch).
