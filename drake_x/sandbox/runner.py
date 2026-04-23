@@ -3,11 +3,13 @@
 This is the main entry point for sandboxed execution. It:
 
 1. Validates the sample and configuration
-2. Creates an ephemeral workspace
-3. Verifies sandbox isolation (fail-closed)
-4. Executes the command
-5. Generates the audit report
-6. Destroys the workspace
+2. Resolves the sandbox backend (firejail, docker, emulator)
+3. Creates an ephemeral workspace
+4. Verifies sandbox isolation (fail-closed)
+5. Executes the command
+6. Collects output artifacts
+7. Generates the audit report
+8. Destroys the workspace
 
 Usage::
 
@@ -30,13 +32,13 @@ import time
 from pathlib import Path
 
 from ..logging import get_logger
-from .base import SandboxConfig, SandboxStatus
+from .artifact_collector import ArtifactCollection, collect_artifacts, copy_artifacts
+from .base import SandboxBackend, SandboxConfig, SandboxStatus
 from .exceptions import (
     IsolationError,
     SandboxError,
     SandboxUnavailableError,
 )
-from .firejail_runner import FirejailBackend
 from .network_guard import validate_network_policy
 from .report import SandboxReport, now_utc_iso
 from .workspace import EphemeralWorkspace
@@ -44,12 +46,49 @@ from .workspace import EphemeralWorkspace
 log = get_logger("sandbox.runner")
 
 
+def resolve_backend(backend_name: str = "firejail", **kwargs) -> SandboxBackend:
+    """Resolve a sandbox backend by name.
+
+    Supported backends:
+    - ``firejail``: Firejail namespace isolation (default, Linux)
+    - ``docker``: Docker container isolation (stronger)
+    - ``emulator``: Android emulator for dynamic analysis
+
+    Parameters
+    ----------
+    backend_name:
+        Name of the backend to use.
+    **kwargs:
+        Passed to the backend constructor (e.g., ``image`` for Docker,
+        ``avd_name`` for emulator).
+    """
+    backend_name = backend_name.lower()
+
+    if backend_name == "firejail":
+        from .firejail_runner import FirejailBackend
+        return FirejailBackend()
+    elif backend_name == "docker":
+        from .docker_runner import DockerBackend
+        return DockerBackend(**kwargs)
+    elif backend_name == "emulator":
+        from .emulator_runner import EmulatorBackend
+        return EmulatorBackend(**kwargs)
+    else:
+        raise SandboxUnavailableError(
+            f"Unknown sandbox backend: {backend_name!r}. "
+            f"Available: firejail, docker, emulator"
+        )
+
+
 def run_sandboxed(
     sample_path: Path,
     command: list[str],
     *,
     config: SandboxConfig | None = None,
+    backend_name: str = "firejail",
     output_dir: Path | None = None,
+    collect_output: bool = True,
+    backend_kwargs: dict | None = None,
 ) -> SandboxReport:
     """Execute a command in a sandboxed environment.
 
@@ -62,26 +101,25 @@ def run_sandboxed(
         to the workspace root.
     config:
         Sandbox configuration. Uses safe defaults if not provided.
+    backend_name:
+        Sandbox backend to use: ``firejail``, ``docker``, or ``emulator``.
     output_dir:
-        Optional directory to write the execution report to.
+        Optional directory to write the execution report and artifacts to.
+    collect_output:
+        If True, collect artifacts from the workspace output directory.
+    backend_kwargs:
+        Additional keyword arguments for the backend constructor.
 
     Returns
     -------
     SandboxReport with full execution details and audit metadata.
-
-    Raises
-    ------
-    SandboxUnavailableError:
-        If the sandbox backend is not installed.
-    IsolationError:
-        If isolation cannot be guaranteed (fail-closed).
     """
     if config is None:
         config = SandboxConfig()
 
     report = SandboxReport(
         sample_path=str(sample_path),
-        backend="firejail",
+        backend=backend_name,
         network_policy=config.network.value,
         timeout_seconds=config.timeout_seconds,
     )
@@ -95,22 +133,28 @@ def run_sandboxed(
         report.audit_observations.append(f"Network policy validation failed: {exc}")
         return report
 
-    # Phase 2: Verify backend availability and isolation (fail-closed)
-    backend = FirejailBackend()
+    # Phase 2: Resolve and verify backend (fail-closed)
+    try:
+        backend = resolve_backend(backend_name, **(backend_kwargs or {}))
+    except SandboxUnavailableError as exc:
+        report.status = SandboxStatus.BACKEND_UNAVAILABLE.value
+        report.error = str(exc)
+        report.audit_observations.append(f"FAIL-CLOSED: Backend resolution failed — {exc}")
+        return report
 
     if not backend.is_available():
         report.status = SandboxStatus.BACKEND_UNAVAILABLE.value
-        report.error = "Firejail is not installed"
+        report.error = f"{backend_name} is not available"
         report.audit_observations.append(
-            "FAIL-CLOSED: Sandbox backend unavailable — execution refused"
+            f"FAIL-CLOSED: Sandbox backend '{backend_name}' unavailable — execution refused"
         )
-        log.error("Firejail not available — refusing to execute without sandbox")
+        log.error("%s not available — refusing to execute without sandbox", backend_name)
         return report
 
     try:
         backend.verify_isolation(config)
         report.isolation_verified = True
-        report.isolation_notes.append("Firejail isolation verified")
+        report.isolation_notes.append(f"{backend_name} isolation verified")
     except (IsolationError, SandboxUnavailableError) as exc:
         report.status = SandboxStatus.ISOLATION_FAILURE.value
         report.error = str(exc)
@@ -124,6 +168,7 @@ def run_sandboxed(
     # Phase 3: Create ephemeral workspace and execute
     report.started_at = now_utc_iso()
     start_time = time.monotonic()
+    artifact_collection: ArtifactCollection | None = None
 
     try:
         with EphemeralWorkspace(sample_path) as ws:
@@ -156,6 +201,22 @@ def run_sandboxed(
                     f"Execution timed out after {config.timeout_seconds}s"
                 )
 
+            # Phase 5: Collect output artifacts
+            if collect_output:
+                artifact_collection = collect_artifacts(
+                    ws.output_dir,
+                    run_id=report.run_id,
+                )
+                if artifact_collection.artifacts:
+                    report.audit_observations.append(
+                        f"Collected {len(artifact_collection.artifacts)} artifact(s) "
+                        f"({artifact_collection.total_size:,} bytes)"
+                    )
+                    # Copy artifacts to output_dir if specified
+                    if output_dir:
+                        artifact_dest = Path(output_dir) / "artifacts"
+                        copy_artifacts(artifact_collection, ws.output_dir, artifact_dest)
+
             report.audit_observations.append("Workspace cleanup: pending")
 
         # Workspace destroyed by context manager
@@ -173,7 +234,7 @@ def run_sandboxed(
         report.audit_observations.append(f"Unexpected error: {exc}")
         log.error("Unexpected error in sandbox: %s", exc)
 
-    # Phase 5: Finalize report
+    # Phase 6: Finalize report
     elapsed = time.monotonic() - start_time
     report.finished_at = now_utc_iso()
     report.duration_seconds = round(elapsed, 3)
@@ -188,8 +249,9 @@ def run_sandboxed(
             log.warning("Failed to write report: %s", exc)
 
     log.info(
-        "Sandbox run %s: status=%s, exit=%s, duration=%.1fs",
-        report.run_id, report.status, report.exit_code, report.duration_seconds,
+        "Sandbox run %s [%s]: status=%s, exit=%s, duration=%.1fs",
+        report.run_id, backend_name, report.status,
+        report.exit_code, report.duration_seconds,
     )
 
     return report

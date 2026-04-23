@@ -42,6 +42,8 @@ def analyze(
         help="Emit candidate YARA rules and a STIX IoC bundle alongside the report. "
              "Outputs are labeled as analyst-review-required candidates.",
     ),
+    sandbox: bool = typer.Option(False, "--sandbox", help="Run extraction tools inside sandbox."),
+    sandbox_backend: str = typer.Option("firejail", "--sandbox-backend", help="Sandbox backend: firejail, docker."),
     ollama_url: str = typer.Option(
         "http://127.0.0.1:11434",
         "--ollama-url",
@@ -179,6 +181,23 @@ def analyze(
 
     # Attach graph snapshot to the model so the JSON export is self-contained.
     attach_graph_snapshot(result, graph)
+
+    # Optional sandboxed extraction
+    if sandbox:
+        from ..sandbox.base import SandboxConfig as SbxConfig
+        from ..sandbox.runner import run_sandboxed as sbx_run
+        info(console, f"sandbox:       running strings extraction via {sandbox_backend}")
+        sbx_report = sbx_run(
+            sample_path=pe_file,
+            command=["strings", f"sample/{pe_file.name}"],
+            backend_name=sandbox_backend,
+            config=SbxConfig(timeout_seconds=120),
+            output_dir=work_dir,
+        )
+        if sbx_report.status == "success":
+            info(console, f"sandbox:       completed (run {sbx_report.run_id})")
+        else:
+            warn(console, f"sandbox:       {sbx_report.status} — {sbx_report.error or 'see report'}")
 
     # Write outputs
     json_path = work_dir / "pe_analysis.json"

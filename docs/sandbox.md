@@ -1,8 +1,9 @@
 # Sandbox — Local-First Isolated Execution
 
 Drake-X's sandbox layer provides controlled, isolated execution of Android
-samples and artifacts for defensive malware research. The primary backend
-is **Firejail** on Linux.
+samples and artifacts for defensive malware research. Three backends are
+available: **Firejail** (namespace isolation), **Docker** (container
+isolation), and **Android Emulator** (dynamic analysis via AVD).
 
 ## Design Principles
 
@@ -17,12 +18,13 @@ is **Firejail** on Linux.
 
 ## Dependencies
 
-### Required
+### Backends
 
-- **Firejail** — Linux sandbox (primary backend)
-  ```bash
-  sudo apt install firejail
-  ```
+| Backend | Isolation Level | Install | Use Case |
+|---------|----------------|---------|----------|
+| **Firejail** | Namespace (medium) | `sudo apt install firejail` | Static tool execution |
+| **Docker** | Container (strong) | [Docker install](https://docs.docker.com/get-docker/) | Stronger isolation, resource limits |
+| **Emulator** | Full Android VM | Android SDK + AVD | Dynamic APK analysis, logcat capture |
 
 ### Python
 
@@ -34,20 +36,31 @@ is **Firejail** on Linux.
 ### CLI
 
 ```bash
-# Basic execution — network DENIED by default
+# Firejail (default) — network DENIED by default
 drake sandbox run malware.apk -- file sample/malware.apk
 
-# With timeout override
-drake sandbox run sample.dex --timeout 60 -- strings sample/sample.dex
+# Docker backend (stronger isolation)
+drake sandbox run sample.apk --backend docker -- strings sample/sample.apk
 
-# With report output
-drake sandbox run payload.apk -o ./reports -- ls -la sample/
+# Android emulator (dynamic analysis)
+drake sandbox run sample.apk --backend emulator -- sample.apk --launch
+
+# With timeout and report output
+drake sandbox run payload.apk --timeout 60 -o ./reports -- strings sample/payload.apk
 
 # Lab mode (network enabled — controlled environment only)
 drake sandbox run sample.apk --network -- curl http://localhost:8080
 
-# Check if sandbox is available
+# Check backend availability
 drake sandbox check
+drake sandbox check --backend docker
+drake sandbox check --backend emulator
+
+# Integrated with analysis commands
+drake apk analyze sample.apk --sandbox
+drake apk analyze sample.apk --sandbox --sandbox-backend docker
+drake pe analyze sample.exe --sandbox
+drake elf analyze sample.elf --sandbox
 ```
 
 ### Python API
@@ -216,16 +229,32 @@ blacklist /boot
 
 ```
 drake_x/sandbox/
-├── __init__.py          # Package entry point (run_sandboxed)
-├── base.py              # ABC, config, result, enums
-├── exceptions.py        # Sandbox-specific exceptions
-├── firejail_runner.py   # Firejail backend implementation
-├── network_guard.py     # Network policy validation
-├── profile_builder.py   # Firejail profile generation
-├── report.py            # Structured execution report
-├── runner.py            # Main orchestrator (ties everything together)
-└── workspace.py         # Ephemeral workspace manager
+├── __init__.py            # Package entry point (run_sandboxed)
+├── base.py                # ABC, config, result, enums
+├── exceptions.py          # Sandbox-specific exceptions
+├── runner.py              # Multi-backend orchestrator
+├── firejail_runner.py     # Firejail namespace backend
+├── docker_runner.py       # Docker container backend
+├── emulator_runner.py     # Android emulator backend
+├── artifact_collector.py  # Output artifact harvesting
+├── network_guard.py       # Network policy validation
+├── profile_builder.py     # Firejail profile generation
+├── report.py              # Structured execution report
+└── workspace.py           # Ephemeral workspace manager
 ```
+
+### Backend Comparison
+
+| Feature | Firejail | Docker | Emulator |
+|---------|----------|--------|----------|
+| Isolation | Namespace | Container | Full VM |
+| Network control | net none | --network none | svc wifi/data disable |
+| Filesystem | private | overlay + read-only | Separate Android FS |
+| Resource limits | No | Memory + CPU + PID | N/A |
+| APK execution | No (host tools) | No (host tools) | Yes (install + launch) |
+| Logcat capture | No | No | Yes |
+| Platform | Linux | Linux/macOS/Windows | Linux/macOS/Windows |
+| Setup complexity | Low | Medium | High |
 
 ## Risks Accepted
 

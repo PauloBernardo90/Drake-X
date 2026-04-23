@@ -36,6 +36,8 @@ def analyze(
     radare2: bool = typer.Option(False, "--radare2", help="Run rabin2 analysis."),
     ghidra: bool = typer.Option(False, "--ghidra", help="Run Ghidra headless deeper analysis on native libraries."),
     dex_deep: bool = typer.Option(False, "--dex-deep", help="Run DEX deep disassembly and semantic extraction."),
+    sandbox: bool = typer.Option(False, "--sandbox", help="Run extraction tools inside sandbox (requires firejail or docker)."),
+    sandbox_backend: str = typer.Option("firejail", "--sandbox-backend", help="Sandbox backend: firejail, docker."),
     vt: bool = typer.Option(False, "--vt", help="Enable VirusTotal hash lookup (requires API key in workspace config)."),
 ) -> None:
     """Run static analysis on an Android APK file.
@@ -231,6 +233,23 @@ def analyze(
         warn(console, f"tools skipped: {', '.join(result.tools_skipped)}")
     if session_id:
         info(console, f"session:       [accent]{session_id}[/accent]")
+
+    # Optional sandboxed extraction
+    if sandbox:
+        from ..sandbox.base import SandboxConfig as SbxConfig
+        from ..sandbox.runner import run_sandboxed as sbx_run
+        info(console, f"sandbox:       running strings extraction via {sandbox_backend}")
+        sbx_report = sbx_run(
+            sample_path=apk_file,
+            command=["strings", f"sample/{apk_file.name}"],
+            backend_name=sandbox_backend,
+            config=SbxConfig(timeout_seconds=120),
+            output_dir=work_dir,
+        )
+        if sbx_report.status == "success":
+            info(console, f"sandbox:       completed (run {sbx_report.run_id})")
+        else:
+            warn(console, f"sandbox:       {sbx_report.status} — {sbx_report.error or 'see report'}")
 
     # Write outputs
     json_path = work_dir / "apk_analysis.json"

@@ -16,6 +16,8 @@ def register(app: typer.Typer) -> None:
         elf_file: Path = typer.Argument(..., help="Path to the ELF binary."),
         workspace: str = typer.Option(None, "--workspace", "-w"),
         output_dir: Path = typer.Option(None, "--output-dir", "-o"),
+        sandbox: bool = typer.Option(False, "--sandbox", help="Run extraction tools inside sandbox."),
+        sandbox_backend: str = typer.Option("firejail", "--sandbox-backend", help="Sandbox backend: firejail, docker."),
     ) -> None:
         """Run static analysis on an ELF binary (Linux / IoT native)."""
         from ..modules.elf_analyze import run_analysis
@@ -55,6 +57,23 @@ def register(app: typer.Typer) -> None:
         info(console, f"tools ran: {', '.join(result.tools_ran) or 'none'}")
         if result.tools_skipped:
             warn(console, f"tools skipped: {', '.join(result.tools_skipped)}")
+
+        # Optional sandboxed extraction
+        if sandbox:
+            from ..sandbox.base import SandboxConfig as SbxConfig
+            from ..sandbox.runner import run_sandboxed as sbx_run
+            info(console, f"sandbox:   running strings extraction via {sandbox_backend}")
+            sbx_report = sbx_run(
+                sample_path=elf_file,
+                command=["strings", f"sample/{elf_file.name}"],
+                backend_name=sandbox_backend,
+                config=SbxConfig(timeout_seconds=120),
+                output_dir=work_dir,
+            )
+            if sbx_report.status == "success":
+                info(console, f"sandbox:   completed (run {sbx_report.run_id})")
+            else:
+                warn(console, f"sandbox:   {sbx_report.status} — {sbx_report.error or 'see report'}")
 
         graph = dedupe_graph(build_elf_graph(result))
         (work_dir / "elf_analysis.json").write_text(render_elf_json(result), encoding="utf-8")
