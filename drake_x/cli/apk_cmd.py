@@ -10,6 +10,8 @@ import typer
 from ..cli_theme import error, info, make_console, success, warn
 from ..modules.apk_analyze import run_analysis
 from ..normalize.apk.bridge import apk_result_to_findings
+from ..normalize.apk.dex_bridge import dex_result_to_findings
+from ..normalize.apk.dex_graph import merge_dex_into_evidence_graph
 from ..normalize.apk.graph_builder import build_apk_evidence_graph
 from ..reporting.apk_report_writer import (
     render_apk_executive,
@@ -33,6 +35,7 @@ def analyze(
     apktool: bool = typer.Option(True, "--apktool/--no-apktool", help="Decompile with apktool."),
     radare2: bool = typer.Option(False, "--radare2", help="Run rabin2 analysis."),
     ghidra: bool = typer.Option(False, "--ghidra", help="Run Ghidra headless deeper analysis on native libraries."),
+    dex_deep: bool = typer.Option(False, "--dex-deep", help="Run DEX deep disassembly and semantic extraction."),
     vt: bool = typer.Option(False, "--vt", help="Enable VirusTotal hash lookup (requires API key in workspace config)."),
 ) -> None:
     """Run static analysis on an Android APK file.
@@ -89,6 +92,7 @@ def analyze(
             use_strings=strings,
             use_radare2=radare2,
             use_ghidra=ghidra,
+            use_dex_deep=dex_deep,
             deep=deep,
             vt_api_key=vt_api_key,
         )
@@ -98,11 +102,27 @@ def analyze(
 
     # Build evidence graph
     graph = build_apk_evidence_graph(result)
-    graph_path = work_dir / "evidence_graph.json"
-    graph_path.write_text(graph.to_json(indent=2), encoding="utf-8")
 
     # Bridge APK findings into standard Finding model
     findings = apk_result_to_findings(result)
+
+    # Merge DEX deep analysis into findings and evidence graph
+    if result.dex_analysis is not None:
+        dex_findings = dex_result_to_findings(result.dex_analysis)
+        findings.extend(dex_findings)
+        merge_dex_into_evidence_graph(graph, result.dex_analysis, root_sha256=result.metadata.sha256)
+
+        # Write standalone DEX report
+        from ..dex.report import write_json_report as write_dex_json, write_markdown_report as write_dex_md
+        write_dex_json(result.dex_analysis, work_dir / "dex_analysis.json")
+        write_dex_md(
+            result.dex_analysis,
+            work_dir / "dex_report.md",
+            apk_name=result.metadata.package_name or apk_file.name,
+        )
+
+    graph_path = work_dir / "evidence_graph.json"
+    graph_path.write_text(graph.to_json(indent=2), encoding="utf-8")
 
     # Persist into workspace if available
     session_id = None
@@ -157,6 +177,12 @@ def analyze(
     info(console, f"network IOCs:  {len(result.network_indicators)}")
     info(console, f"protections:   {len([p for p in result.protection_indicators if p.status.value != 'not_observed'])}")
     info(console, f"frida targets: {len(result.frida_targets)}")
+    if result.dex_analysis is not None:
+        da = result.dex_analysis
+        info(console, f"dex deep:      {len(da.dex_files)} DEX, {len(da.sensitive_api_hits)} API hits, "
+             f"obfuscation={da.obfuscation_score:.0%}, {len(da.findings)} findings")
+    elif dex_deep:
+        warn(console, "dex deep:      analysis failed or unavailable")
     if result.ghidra_analysis.available:
         structured = len(result.native_analysis)
         total = len(result.ghidra_analysis.analyzed_binaries)

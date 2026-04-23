@@ -54,6 +54,7 @@ def run_analysis(
     use_strings: bool = True,
     use_radare2: bool = False,
     use_ghidra: bool = False,
+    use_dex_deep: bool = False,
     deep: bool = False,
     vt_api_key: str = "",
 ) -> ApkAnalysisResult:
@@ -274,6 +275,33 @@ def run_analysis(
         result.frida_targets = generate_frida_targets(result)
     except Exception as exc:  # noqa: BLE001
         log.warning("Frida target generation failed: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Phase 8 — DEX deep analysis (opt-in via --dex-deep)
+    # ------------------------------------------------------------------
+    if use_dex_deep:
+        log.info("Phase 8: DEX deep analysis")
+        try:
+            from ..dex.pipeline import run_dex_analysis
+
+            dex_result = run_dex_analysis(
+                apk,
+                work / "dex_deep",
+                use_jadx=use_jadx,
+                use_apktool=use_apktool,
+                use_androguard=True,
+            )
+            result.dex_analysis = dex_result
+            result.tools_ran.append("dex_deep")
+            log.info(
+                "DEX deep: %d findings, %d API hits, score=%.2f",
+                len(dex_result.findings),
+                len(dex_result.sensitive_api_hits),
+                dex_result.obfuscation_score,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.warning("DEX deep analysis failed: %s", exc)
+            result.warnings.append(f"DEX deep analysis failed: {exc}")
 
     log.info("Analysis complete: %d findings, %d network IOCs, %d protections, %d frida targets",
              len(result.behavior_indicators),

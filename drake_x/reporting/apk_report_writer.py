@@ -48,6 +48,7 @@ def render_apk_markdown(result: ApkAnalysisResult) -> str:
     _sec_hidden_logic(lines, result)
     _sec_protections(lines, result)
     _sec_ghidra(lines, result)
+    _sec_dex_deep(lines, result)
     _sec_frida_targets(lines, result)
     _sec_indicators(lines, result)
     _sec_conclusions(lines, result)
@@ -101,6 +102,13 @@ def _sec_executive(lines: list[str], r: ApkAnalysisResult) -> None:
     if strong_campaigns:
         labels = ", ".join(f"`{c.category}`" for c in strong_campaigns)
         lines.append(f"The sample shares traits with: {labels}.")
+    if r.dex_analysis is not None:
+        da = r.dex_analysis
+        lines.append(
+            f"DEX deep analysis identified **{len(da.sensitive_api_hits)}** "
+            f"sensitive API usages across **{len(da.dex_files)}** DEX file(s), "
+            f"with an obfuscation score of **{da.obfuscation_score:.0%}**."
+        )
     lines.append("")
     lines.append("> All conclusions below separate **observed evidence** from "
                  "**analytic assessment**. Nothing in this report constitutes "
@@ -282,6 +290,101 @@ def _sec_ghidra(lines: list[str], r: ApkAnalysisResult) -> None:
     if r.native_analysis:
         lines.append("- Structured JSON evidence is stored alongside the analysis output "
                      "for reproducibility.")
+    lines.append("")
+
+
+def _sec_dex_deep(lines: list[str], r: ApkAnalysisResult) -> None:
+    da = r.dex_analysis
+    if da is None:
+        return
+
+    lines.append("## DEX Deep Analysis")
+    lines.append("")
+    lines.append("> **Source classification:** static fact (DEX disassembly and semantic extraction)")
+    lines.append("")
+
+    # Multi-DEX inventory
+    if da.dex_files:
+        lines.append("### Multi-DEX Inventory")
+        lines.append("")
+        lines.append("| DEX File | Size | Classes | Methods | Strings |")
+        lines.append("|----------|------|---------|---------|---------|")
+        for d in da.dex_files:
+            lines.append(
+                f"| `{d.filename}` | {d.size:,} | {d.class_count:,} | "
+                f"{d.method_count:,} | {d.string_count:,} |"
+            )
+        lines.append("")
+        lines.append(
+            f"**Totals:** {da.total_classes:,} classes, "
+            f"{da.total_methods:,} methods, {da.total_strings:,} strings"
+        )
+        lines.append("")
+
+    # Sensitive API hits
+    if da.sensitive_api_hits:
+        lines.append("### Sensitive API Usage")
+        lines.append("")
+        # Group by category
+        from collections import defaultdict
+        by_cat: dict[str, list] = defaultdict(list)
+        for hit in da.sensitive_api_hits:
+            by_cat[hit.api_category.value].append(hit)
+
+        lines.append("| Category | API | Severity | Confidence | ATT&CK |")
+        lines.append("|----------|-----|----------|------------|--------|")
+        for cat in sorted(by_cat):
+            for h in by_cat[cat]:
+                attck = ", ".join(h.mitre_attck) if h.mitre_attck else ""
+                lines.append(
+                    f"| {cat} | `{h.api_name}` | {h.severity.value} | "
+                    f"{h.confidence:.0%} | {attck} |"
+                )
+        lines.append("")
+
+    # Obfuscation
+    if da.obfuscation_indicators:
+        lines.append("### Obfuscation Assessment")
+        lines.append(f"\n**Obfuscation score:** {da.obfuscation_score:.0%}")
+        lines.append("")
+        for ind in da.obfuscation_indicators:
+            lines.append(f"- **{ind.signal.value}** (conf: {ind.confidence:.0%}) — {ind.description}")
+        lines.append("")
+
+    # Packing indicators
+    if da.packing_indicators:
+        lines.append("### Packing / Distribution Indicators")
+        lines.append("")
+        for pi in da.packing_indicators:
+            lines.append(f"- **{pi.indicator_type}**: {pi.description} (conf: {pi.confidence:.0%})")
+        lines.append("")
+
+    # String IoCs
+    iocs = [s for s in da.classified_strings if s.is_potential_ioc]
+    if iocs:
+        lines.append("### String IoCs")
+        lines.append("")
+        lines.append("| Category | Value | Confidence |")
+        lines.append("|----------|-------|------------|")
+        for s in iocs[:30]:
+            lines.append(f"| {s.category.value} | `{s.value[:80]}` | {s.confidence:.0%} |")
+        if len(iocs) > 30:
+            lines.append(f"| ... | {len(iocs) - 30} more | |")
+        lines.append("")
+
+    # Call graph summary
+    if da.call_edges:
+        lines.append(f"### Call Graph\n\n**{len(da.call_edges):,}** call edges extracted.")
+        lines.append("")
+
+    # Tools and phases
+    lines.append(f"**Tools used:** {', '.join(da.tools_used) or 'none'}")
+    if da.tools_skipped:
+        lines.append(f"**Tools skipped:** {', '.join(da.tools_skipped)}")
+    if da.warnings:
+        lines.append("\n**Warnings:**")
+        for w in da.warnings:
+            lines.append(f"- {w}")
     lines.append("")
 
 

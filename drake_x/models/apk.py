@@ -271,6 +271,12 @@ class ApkAnalysisResult(BaseModel):
     # Structured native binary analysis (Ghidra structured export)
     native_analysis: list[NativeBinaryAnalysis] = Field(default_factory=list)
 
+    # DEX deep analysis (opt-in via --dex-deep)
+    dex_analysis: Any | None = Field(
+        default=None,
+        description="DexAnalysisResult from the DEX deep analysis pipeline (opt-in).",
+    )
+
     # Warnings accumulated during analysis
     warnings: list[str] = Field(default_factory=list)
     tools_ran: list[str] = Field(default_factory=list)
