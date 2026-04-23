@@ -84,6 +84,19 @@ def analyze(
         if not vt_api_key:
             warn(console, "--vt requested but no api_key in workspace [virustotal] config and no VT_API_KEY env var")
 
+    # --- Integrity: compute original hashes and start custody chain ---
+    from ..integrity.hashing import compute_file_hashes
+    from ..integrity.chain import CustodyChain
+    from ..integrity.models import CustodyAction, ExecutionContext
+    from ..integrity.versioning import capture_version_info
+    from ..integrity.reporting import build_integrity_report, write_integrity_report
+
+    sample_identity = compute_file_hashes(apk_file)
+    exec_ctx = ExecutionContext(sample_sha256=sample_identity.sha256, analysis_mode="apk_analyze")
+    chain = CustodyChain(run_id=exec_ctx.run_id, sample_sha256=sample_identity.sha256)
+    chain.record(CustodyAction.INGEST, actor="apk_cmd", details=f"Ingested {apk_file.name}")
+    chain.register_artifact(artifact_type="apk_original", file_path=apk_file, sha256=sample_identity.sha256)
+
     # Run analysis
     try:
         result = run_analysis(
@@ -98,7 +111,9 @@ def analyze(
             deep=deep,
             vt_api_key=vt_api_key,
         )
+        chain.record(CustodyAction.ANALYZE, actor="apk_analyze", details="Analysis completed")
     except Exception as exc:
+        chain.record_failure(actor="apk_analyze", details=str(exc))
         error(console, f"analysis failed: {exc}")
         raise typer.Exit(code=1) from exc
 
@@ -261,7 +276,25 @@ def analyze(
         md_path = work_dir / "apk_report.md"
         md_path.write_text(render_apk_markdown(result), encoding="utf-8")
         info(console, f"report:        [accent]{md_path}[/accent]")
+        chain.record(CustodyAction.REPORT_GENERATE, actor="report_writer", details="Markdown report")
+        chain.register_artifact(artifact_type="report_md", file_path=md_path)
 
         exec_path = work_dir / "apk_executive.md"
         exec_path.write_text(render_apk_executive(result), encoding="utf-8")
         info(console, f"executive:     [accent]{exec_path}[/accent]")
+
+    # Register JSON output as artifact
+    chain.register_artifact(artifact_type="report_json", file_path=json_path)
+
+    # --- Integrity: generate and write integrity report ---
+    version_info = capture_version_info(analysis_profile="apk_analyze")
+    exec_ctx.version_info = version_info
+    integrity_report = build_integrity_report(
+        sample_identity=sample_identity,
+        chain=chain,
+        execution_context=exec_ctx,
+        version_info=version_info,
+    )
+    integrity_path = work_dir / "integrity_report.json"
+    write_integrity_report(integrity_report, integrity_path)
+    info(console, f"integrity:     [accent]{integrity_path}[/accent] ({'PASS' if integrity_report.verified else 'FAIL'})")
