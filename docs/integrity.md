@@ -240,6 +240,85 @@ drake apk analyze sample.apk \
 All three options are also available on `drake pe analyze` and
 `drake elf analyze`.
 
+## CLI Commands
+
+The `drake integrity` command group provides off-line validation and
+provenance utilities that operate on past runs without needing the
+original samples:
+
+### Verify a ledger
+
+```bash
+# Full chain verification
+drake integrity verify-ledger --ledger ./integrity_ledger.db
+
+# Verify a specific run only
+drake integrity verify-ledger --ledger ./integrity_ledger.db --run-id run-abc123
+
+# Use workspace-shared drake.db
+drake integrity verify-ledger --workspace default
+```
+
+Exit codes:
+- `0` — chain verified
+- `1` — tampering detected
+- `2` — ledger not found or invalid
+
+### Verify an integrity report off-line
+
+```bash
+drake integrity verify-report ./integrity_report.json
+```
+
+Re-runs the full integrity check without needing the original analysis
+run — useful for audit review weeks or months after the run.
+
+### Export STIX provenance bundle on demand
+
+Two modes:
+
+```bash
+# From a report file
+drake integrity export-bundle ./integrity_report.json -o bundle.stix.json
+
+# From ledger by run_id
+drake integrity export-bundle --run-id run-abc123 --ledger ledger.db
+drake integrity export-bundle --run-id run-abc123 --workspace default
+```
+
+### List runs in a ledger
+
+```bash
+drake integrity list-runs --ledger ./integrity_ledger.db
+drake integrity list-runs --workspace default
+```
+
+### Show a specific run's custody chain
+
+```bash
+drake integrity show-run run-abc123 --ledger ./integrity_ledger.db
+drake integrity show-run run-abc123 --ledger ./integrity_ledger.db --detailed
+```
+
+## Workspace-Shared Ledger
+
+When `--ledger` is passed and a workspace is active, the ledger tables
+are stored **inside the workspace's `drake.db`** alongside sessions,
+findings, and evidence graphs. No separate file is created.
+
+```bash
+drake apk analyze sample.apk --workspace my-case --ledger
+# → entries appended to ~/.drake-x/workspaces/my-case/drake.db
+```
+
+This enables a single-file workspace export that includes everything
+(sessions + findings + graphs + integrity chain) for audit hand-off.
+The ledger tables are additive and namespaced — they do not conflict
+with Drake-X core tables.
+
+When no workspace is used, a standalone `integrity_ledger.db` file is
+created in the parent of the analysis output directory.
+
 ## Module Architecture
 
 ```

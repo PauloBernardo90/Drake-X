@@ -299,7 +299,11 @@ def analyze(
         execution_context=exec_ctx,
         version_info=version_info,
     )
-    ledger_path = (work_dir.parent / "integrity_ledger.db") if ledger else None
+    # Prefer workspace-shared drake.db when workspace is active; fallback to local file.
+    if ledger:
+        ledger_path = ws.db_path if ws else (work_dir.parent / "integrity_ledger.db")
+    else:
+        ledger_path = None
     outputs = finalize_integrity_outputs(
         integrity_report,
         work_dir,

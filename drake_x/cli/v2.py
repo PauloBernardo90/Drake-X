@@ -26,6 +26,7 @@ from . import (
     graph_cmd,
     ingest_cmd,
     init_cmd,
+    integrity_cmd,
     ioc_cmd,
     mission_cmd,
     pe_cmd,
@@ -87,6 +88,7 @@ app.add_typer(ingest_cmd.app, name="ingest")
 app.add_typer(validate_cmd.app, name="validate")
 app.add_typer(elf_cmd.app, name="elf")
 app.add_typer(sandbox_cmd.app, name="sandbox")
+app.add_typer(integrity_cmd.app, name="integrity")
 
 # Console is imported lazily to avoid circular import (console_cmd
 # imports v2.app for command dispatch).

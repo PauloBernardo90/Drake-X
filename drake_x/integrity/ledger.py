@@ -24,11 +24,14 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from ..logging import get_logger
 from .exceptions import IntegrityError
 from .models import CustodyEvent, IntegrityReport
+
+if TYPE_CHECKING:
+    from ..core.workspace import Workspace
 
 log = get_logger("integrity.ledger")
 
@@ -65,12 +68,28 @@ class LedgerEntry:
 
 
 class IntegrityLedger:
-    """Append-only WAL-backed SQLite ledger for integrity events."""
+    """Append-only WAL-backed SQLite ledger for integrity events.
+
+    Can operate in two modes:
+    - Dedicated DB (default): creates its own ``integrity_ledger.db``
+    - Shared DB: attaches its tables to an existing database (e.g. the
+      workspace ``drake.db``). Tables are additive and namespaced so
+      they coexist with Drake-X core tables.
+    """
 
     def __init__(self, db_path: Path) -> None:
         self._db_path = Path(db_path)
         self._db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+
+    @classmethod
+    def for_workspace(cls, workspace: "Workspace") -> "IntegrityLedger":
+        """Create a ledger that shares the workspace's drake.db.
+
+        The ledger tables are additive — they coexist with sessions,
+        findings, and evidence_graphs in the same database file.
+        """
+        return cls(workspace.db_path)
 
     def _init_db(self) -> None:
         """Initialize schema and enable WAL mode."""
@@ -264,3 +283,46 @@ class IntegrityLedger:
                 "SELECT DISTINCT run_id FROM ledger_entries ORDER BY run_id"
             ).fetchall()
         return [r["run_id"] for r in rows]
+
+    def get_integrity_report(self, run_id: str) -> IntegrityReport | None:
+        """Retrieve the most recent integrity_report entry for a run.
+
+        Returns a reconstructed :class:`IntegrityReport` or None if no
+        report entry exists for that run_id.
+        """
+        with self._connect() as conn:
+            row = conn.execute(
+                """SELECT payload FROM ledger_entries
+                   WHERE run_id = ? AND entry_type = 'integrity_report'
+                   ORDER BY seq DESC LIMIT 1""",
+                (run_id,),
+            ).fetchone()
+        if not row:
+            return None
+        payload = json.loads(row["payload"])
+        return IntegrityReport(**payload)
+
+    def run_summary(self, run_id: str) -> dict[str, Any]:
+        """Return a short summary of a run: entry counts, timestamps, verification."""
+        entries = self.read_run(run_id)
+        if not entries:
+            return {"run_id": run_id, "found": False}
+
+        by_type: dict[str, int] = {}
+        for e in entries:
+            by_type[e.entry_type] = by_type.get(e.entry_type, 0) + 1
+
+        verified = None
+        verify_entries = [e for e in entries if e.entry_type == "verification"]
+        if verify_entries:
+            verified = verify_entries[-1].payload.get("verified")
+
+        return {
+            "run_id": run_id,
+            "found": True,
+            "entry_count": len(entries),
+            "entry_types": by_type,
+            "first_timestamp": entries[0].timestamp,
+            "last_timestamp": entries[-1].timestamp,
+            "verified": verified,
+        }
