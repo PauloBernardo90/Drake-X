@@ -39,6 +39,9 @@ pe = [
 disasm = [
     "capstone>=5.0.0",
 ]
+dotnet = [
+    "dnfile>=0.15.0",
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
@@ -47,6 +50,7 @@ dev = [
     "mypy>=1.10.0",
     "pefile>=2023.2.7",
     "capstone>=5.0.0",
+    "dnfile>=0.15.0",
 ]
 
 [project.scripts]

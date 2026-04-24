@@ -80,7 +80,17 @@ class PeSection(BaseModel):
 
 
 class PeImport(BaseModel):
-    """One imported function from a DLL."""
+    """One imported function from a DLL.
+
+    Also used as the unified in-memory representation for .NET
+    P/Invokes and MemberRefs. For P/Invokes, ``dll`` is the native
+    module and ``function`` is the Win32 API name; ``notes='pinvoke'``
+    identifies them. For MemberRefs, ``dll='(managed)'`` and
+    ``function`` is the qualified ``Namespace.Type.Member`` string;
+    ``notes='member_ref'`` identifies them. This projection keeps the
+    downstream risk classifier, evidence graph, and rule baseline
+    uniform across native and managed samples.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -88,6 +98,38 @@ class PeImport(BaseModel):
     function: str = ""
     ordinal: int | None = None
     notes: str | None = None
+
+
+class ManagedMetadata(BaseModel):
+    """CLR metadata extracted from a .NET PE binary.
+
+    Populated by :mod:`drake_x.integrations.binary.dotnet_parser` when
+    the COM descriptor directory is present. For native samples this
+    field stays at its default (all-empty) state and participates in
+    no downstream computation.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    is_dotnet: bool = False
+    runtime_version: str = ""
+    il_only: bool = False
+    has_strong_name: bool = False
+    requires_32bit: bool = False
+    entry_point_token: str = ""
+
+    # Metadata tables (flattened)
+    assembly_refs: list[dict[str, str]] = Field(default_factory=list)
+    type_refs: list[str] = Field(default_factory=list)
+    member_refs: list[str] = Field(default_factory=list)
+    pinvokes: list[dict[str, str]] = Field(default_factory=list)
+
+    # Heaps
+    user_strings: list[str] = Field(default_factory=list)
+
+    # Derived signals
+    obfuscator_fingerprints: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
 
 
 class PeExport(BaseModel):
@@ -323,6 +365,11 @@ class PeAnalysisResult(BaseModel):
     # --ai-exploit-assessment is requested and the Ollama runtime is
     # reachable). This is an analytic assessment, NOT operational guidance.
     ai_exploit_assessment: dict[str, Any] | None = None
+
+    # v1.1 — CLR metadata (populated when the sample is a .NET binary).
+    # For native samples this stays at its default (is_dotnet=False) and
+    # participates in no downstream computation.
+    managed: ManagedMetadata = Field(default_factory=ManagedMetadata)
 
     # v0.9 — Graph snapshot (optional). When set, this is a JSON-serialized
     # EvidenceGraph for the PE subgraph. Reports and detection writers

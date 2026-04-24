@@ -90,6 +90,46 @@ def run_analysis(
         result.tools_ran.append("pefile")
         for w in parsed["warnings"]:
             result.warnings.append(w)
+
+        # --- Phase 2b: CLR metadata for .NET samples (v1.1) ---
+        # If the binary is a managed assembly, extract its metadata tables
+        # and project P/Invokes and MemberRefs as synthetic PeImport
+        # records so the downstream graph, risk classifier, and rule
+        # baseline operate uniformly across native and managed samples.
+        try:
+            import pefile  # local import; already guarded above
+            from ..integrations.binary.dotnet_parser import (
+                is_available as dnfile_available,
+                is_dotnet,
+                parse_dotnet,
+                synthesize_native_imports,
+            )
+            pe_for_probe = pefile.PE(str(sample), fast_load=True)
+            try:
+                managed_sample = is_dotnet(pe_for_probe)
+            finally:
+                pe_for_probe.close()
+            if managed_sample:
+                if dnfile_available():
+                    log.info("Phase 2b: parsing CLR metadata (.NET binary)")
+                    managed = parse_dotnet(sample)
+                    managed.is_dotnet = True
+                    result.managed = managed
+                    synth = synthesize_native_imports(managed)
+                    if synth:
+                        result.imports = list(result.imports) + synth
+                    result.tools_ran.append("dnfile")
+                    for w in managed.warnings:
+                        result.warnings.append(w)
+                else:
+                    result.tools_skipped.append("dnfile")
+                    result.warnings.append(
+                        ".NET binary detected but dnfile not installed — CLR "
+                        "metadata unavailable. Install with: pip install dnfile"
+                    )
+        except Exception as exc:  # noqa: BLE001
+            log.warning(".NET metadata probe failed: %s", exc)
+            result.warnings.append(f".NET metadata probe failed: {exc}")
     else:
         result.tools_skipped.append("pefile")
         result.warnings.append(
