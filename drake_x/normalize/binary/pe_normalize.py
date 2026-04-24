@@ -60,9 +60,12 @@ def pe_result_to_findings(result: PeAnalysisResult) -> list[Finding]:
             tags=["pe", "import", cat],
         ))
 
-    # Section anomaly findings
+    # Section anomaly findings. Preserve any pattern_detector findings
+    # that earlier phases (v1.3) already added to suspicious_patterns.
     section_assessments = assess_sections(result.sections)
-    result.suspicious_patterns = section_assessments
+    preexisting = [p for p in (result.suspicious_patterns or [])
+                   if isinstance(p, dict) and p.get("indicator_type")]
+    result.suspicious_patterns = list(section_assessments) + preexisting
 
     packer_sigs = [s for s in section_assessments if s["finding_type"] == "packer_section_name"]
     if packer_sigs:

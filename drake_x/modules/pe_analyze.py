@@ -155,6 +155,7 @@ def run_analysis(
         except Exception as exc:  # noqa: BLE001
             log.warning("string extraction failed: %s", exc)
             result.warnings.append(f"string extraction failed: {exc}")
+
     else:
         result.tools_skipped.append("pefile")
         result.warnings.append(
@@ -171,6 +172,31 @@ def run_analysis(
 
     result.import_risk_findings = classify_imports(result.imports)
     result.suspicious_patterns = assess_sections(result.sections)
+
+    # --- Phase 3b: heuristic pattern detectors (v1.3) ----------------------
+    # Runs AFTER the section-anomaly assessor so it can append to the same
+    # suspicious_patterns field. Detects binaries whose absence of signal
+    # is itself the class indicator: VB6 downloader stubs (Emotet-era) and
+    # .NET reflection-obfuscated MSIL (AgentTesla-family).
+    try:
+        from ..integrations.binary.pattern_detectors import detect_all
+        _sections_dump = [s.model_dump() if hasattr(s, "model_dump")
+                          else dict(s) if isinstance(s, dict) else {}
+                          for s in result.sections]
+        _dlls = sorted({i.dll for i in result.imports if i.dll})
+        _funcs = [i.function for i in result.imports if i.function]
+        _managed_dict = (result.managed.model_dump()
+                         if hasattr(result.managed, "model_dump")
+                         else {})
+        _strings_tagged = result.strings
+        _findings = detect_all(_dlls, _funcs, _sections_dump,
+                               _strings_tagged, _managed_dict)
+        if _findings:
+            result.suspicious_patterns = list(result.suspicious_patterns) + _findings
+            result.tools_ran.append("pattern_detectors")
+    except Exception as exc:  # noqa: BLE001
+        log.warning("pattern detectors failed: %s", exc)
+        result.warnings.append(f"pattern detectors failed: {exc}")
 
     # ------------------------------------------------------------------
     # Phase 3b — Exploit-indicator heuristics (v0.9)
