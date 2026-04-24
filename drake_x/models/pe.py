@@ -371,6 +371,16 @@ class PeAnalysisResult(BaseModel):
     # participates in no downstream computation.
     managed: ManagedMetadata = Field(default_factory=ManagedMetadata)
 
+    # v1.2 — printable strings extracted from raw PE bytes (ASCII + UTF-16LE)
+    # classified into categories. Empty when the string extractor is not
+    # available or the sample is too small.
+    strings: list[dict[str, Any]] = Field(default_factory=list)
+
+    # v1.2 — sensitive API names that appear as strings but NOT in the
+    # static import table; strong indicator of GetProcAddress-based
+    # dynamic resolution used by ransomware and packed malware.
+    dynamic_api_resolution: list[dict[str, Any]] = Field(default_factory=list)
+
     # v0.9 — Graph snapshot (optional). When set, this is a JSON-serialized
     # EvidenceGraph for the PE subgraph. Reports and detection writers
     # may consult it; the canonical in-memory graph lives off the model.

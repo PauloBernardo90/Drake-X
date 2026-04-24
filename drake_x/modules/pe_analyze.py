@@ -130,6 +130,31 @@ def run_analysis(
         except Exception as exc:  # noqa: BLE001
             log.warning(".NET metadata probe failed: %s", exc)
             result.warnings.append(f".NET metadata probe failed: {exc}")
+
+        # --- Phase 2c: string extraction + dynamic-API detection (v1.2) ---
+        # Raw printable strings are surfaced into the evidence graph so
+        # that ransomware-indicating tokens (e.g. ``.WNCRY`` extensions,
+        # ``vssadmin delete shadows``), C2 URLs, and dynamically-resolved
+        # API names (e.g. ``CryptEncrypt`` as a string without a matching
+        # import) become visible to the rule-based correlator and to the
+        # LLM correlation layer.
+        try:
+            from ..integrations.binary.string_extractor import (
+                extract_tagged_strings,
+                detect_dynamic_api_resolution,
+            )
+            with open(sample, "rb") as fh:
+                pe_bytes = fh.read()
+            existing_imports = {imp.function for imp in result.imports
+                                if imp.function}
+            tagged = extract_tagged_strings(pe_bytes, existing_imports)
+            result.strings = tagged
+            result.dynamic_api_resolution = detect_dynamic_api_resolution(tagged)
+            if tagged:
+                result.tools_ran.append("string_extractor")
+        except Exception as exc:  # noqa: BLE001
+            log.warning("string extraction failed: %s", exc)
+            result.warnings.append(f"string extraction failed: {exc}")
     else:
         result.tools_skipped.append("pefile")
         result.warnings.append(
