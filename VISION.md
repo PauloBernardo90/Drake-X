@@ -2,14 +2,20 @@
 
 ## Vision
 
-Drake-X is a local-first offensive security framework for Kali Linux.
-It exists to make authorized security assessments more structured,
-reproducible, and evidence-driven — without replacing the human operator
-who is ultimately responsible for every action taken against a target.
+Drake-X is a local-first, evidence-driven malware analysis and threat
+investigation platform for Kali Linux. It exists to make authorized
+defensive investigations — malware triage, native binary inspection,
+indicator-of-compromise enrichment, and analyst-assisted dynamic
+validation — more structured, reproducible, and auditable, without
+replacing the analyst who is ultimately responsible for every
+investigation decision.
 
-The framework combines tool orchestration, strict scope enforcement,
+The platform combines tool orchestration, strict scope enforcement,
 local AI assistance, and evidence-linked reporting into a single
-workflow that runs entirely on the operator's host. It never calls home.
+workflow that runs entirely on the analyst's host. It never calls
+home, and it deliberately excludes any exploitation, weaponization,
+or post-exploitation capability (see ADR-0001 and ADR-0005 for the
+explicit non-goals).
 
 ## Why Drake-X Exists
 
@@ -136,13 +142,14 @@ Drake-X does not and will not:
 
 ## Long-Term Outlook
 
-Drake-X aims to become the standard local-first framework for structured,
-evidence-driven offensive security assessments on Kali Linux. Not by
-being the fastest or the most aggressive tool in the operator's arsenal,
-but by being the most disciplined: the one that enforces scope, preserves
-evidence, separates fact from inference, and makes every assessment
-reproducible.
+Drake-X aims to become the standard local-first platform for
+structured, evidence-driven malware analysis and defensive threat
+investigation on Kali Linux. Not by being the fastest triage tool in
+the analyst's workflow, but by being the most disciplined: the one
+that enforces scope, preserves evidence, separates fact from
+inference, and makes every investigation reproducible.
 
-The framework is designed for operators who take authorization seriously,
-who need their reports to hold up under scrutiny, and who want an AI
-assistant that helps them think — not one that acts on their behalf.
+The platform is designed for analysts who take authorization
+seriously, who need their reports to hold up under scrutiny, and who
+want an AI assistant that helps them think — not one that acts on
+their behalf.

@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "drake-x"
-version = "1.0.0"
+version = "1.0.1"
 description = "Local-first evidence-driven malware analysis and threat investigation platform for Kali Linux with local AI assistance."
 readme = "README.md"
 requires-python = ">=3.12"
