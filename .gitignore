@@ -61,3 +61,7 @@ output/
 
 # Local reference material
 *.pdf
+
+# SBSeg 2026 paper draft (local only — never committed to main repo)
+DrakeX_SBSeg2026/
+.drake_paper_extracted.txt
